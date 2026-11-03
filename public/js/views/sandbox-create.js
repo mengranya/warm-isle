@@ -232,7 +232,7 @@ export async function render(root, app) {
       {},
       h('strong', { text: '点数提示：' }),
       h('span', {
-        text: '普通常人单项基准 9；普通 8～10，优秀 11～13，顶尖 14～18，弱小 3～7。',
+        text: '普通常人单项基准 9；普通 8～10，优秀 11～13，顶尖 14～18，弱小 3～7。输入时可临时清空或超限，离开输入框后会自动限制在 3～18。',
       }),
     ),
   );
@@ -873,22 +873,67 @@ export async function render(root, app) {
       ...currentAbilities().map((attribute) => {
         const value = currentAttributes[attribute.key] ?? 9;
         const inputElement = input({
-          type: 'number',
-          min: SANDBOX_LIMITS.minAttributes,
-          max: SANDBOX_LIMITS.maxAttributes,
+          type: 'text',
+          inputMode: 'numeric',
+          autocomplete: 'off',
           value,
           class: 'attribute-number',
           id: `sb-attr-${attribute.key}`,
         });
         attributeInputs.set(attribute.key, inputElement);
+
+        // 聚焦时全选，直接输入即可覆盖旧值；不再让 3 变成 31、318。
+        // 放到下一帧，避开浏览器在 focus 之后自动把光标移到末尾。
+        const selectAll = () => {
+          try {
+            inputElement.select();
+          } catch {
+            /* 某些浏览器不支持 select，忽略即可 */
+          }
+        };
+        inputElement.addEventListener('focus', () => {
+          setTimeout(selectAll, 0);
+        });
+        inputElement.addEventListener('click', selectAll);
+
+        // 输入过程中允许为空、0、负数或超上限；只更新草稿，不改写输入框，
+        // 这样 Safari/Chrome 的数字输入不会把新数字接在旧值后面。
         inputElement.addEventListener('input', () => {
-          currentAttributes[attribute.key] = Math.max(
-            SANDBOX_LIMITS.minAttributes,
-            Math.min(SANDBOX_LIMITS.maxAttributes, Number(inputElement.value) || SANDBOX_LIMITS.minAttributes),
-          );
-          inputElement.value = String(currentAttributes[attribute.key]);
+          const raw = inputElement.value.trim();
+          if (!raw) {
+            currentAttributes[attribute.key] = 0;
+          } else {
+            const numeric = Number(raw);
+            if (Number.isFinite(numeric)) {
+              currentAttributes[attribute.key] = numeric;
+            }
+          }
           refreshBudget();
           updatePreview();
+        });
+
+        // 真正离开输入状态（blur / change / 点击其他区域）时才按极值收敛。
+        const commitAttribute = () => {
+          const raw = inputElement.value.trim();
+          const numeric = Number(raw);
+          const normalized = raw && Number.isFinite(numeric)
+            ? Math.max(
+                SANDBOX_LIMITS.minAttributes,
+                Math.min(SANDBOX_LIMITS.maxAttributes, Math.round(numeric)),
+              )
+            : SANDBOX_LIMITS.minAttributes;
+          currentAttributes[attribute.key] = normalized;
+          inputElement.value = String(normalized);
+          refreshBudget();
+          updatePreview();
+        };
+        inputElement.addEventListener('change', commitAttribute);
+        inputElement.addEventListener('blur', commitAttribute);
+        inputElement.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            inputElement.blur();
+          }
         });
         return h(
           'div',
