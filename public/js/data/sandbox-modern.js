@@ -1,0 +1,357 @@
+/**
+ * 明朝之后的历史剧本：清朝前期、晚清、民国。
+ * 与二十四史世界书共用历史类沙盒结构。
+ */
+
+const FIXED_TIME = '2026-01-01T08:00:00.000Z';
+
+function makeModernBook(config) {
+  return {
+    schemaVersion: 1,
+    kind: 'warm-isle.sandbox-worldbook',
+    id: config.id,
+    name: config.name,
+    category: 'historical',
+    description: config.description,
+    tags: ['真实历史', '近现代', config.name],
+    builtin: true,
+    createdAt: FIXED_TIME,
+    era: {
+      dynasty: config.dynasty,
+      label: config.name,
+      startYear: config.startYear,
+      endYear: config.endYear,
+      defaultYear: config.defaultYear,
+      calendar: '公元',
+      periods: config.periods.map(([name, start, end, summary]) => ({
+        name,
+        startYear: start,
+        endYear: end,
+        summary,
+      })),
+      events: config.events.map(([year, title, content]) => ({ year, title, content })),
+    },
+    defaults: {
+      currency: config.currency,
+      startingMoney: config.money,
+      location: config.capital,
+      date: { year: config.defaultYear, month: 6, day: 12 },
+      time: '午后',
+      weather: '阴',
+    },
+    genreRules: config.rules,
+    entries: config.entries.map(([title, keywords, content], index) => ({
+      id: `sb_${config.key}_entry_${index + 1}`,
+      title,
+      keywords,
+      content,
+      pinned: index === 0,
+      priority: index === 0 ? 100 : 85,
+    })),
+    scenarios: config.scenarios.map((scenario, index) => ({
+      id: `sb_scene_${config.key}_${index + 1}`,
+      title: scenario.title,
+      description: scenario.description,
+      location: scenario.location,
+      opening: scenario.opening,
+      choices: scenario.choices,
+      inventory: scenario.inventory || [],
+      money: scenario.money,
+      realm: scenario.realm,
+      titleLabel: scenario.titleLabel,
+      template: scenario.template,
+      yearStart: scenario.yearStart,
+      yearEnd: scenario.yearEnd,
+      fixedFigure: scenario.fixedFigure || null,
+      creationMode: scenario.fixedFigure ? 'fixed' : 'virtual',
+    })),
+  };
+}
+
+export const MODERN_HISTORICAL_BOOKS = [
+  makeModernBook({
+    id: 'sb_world_qing_early',
+    key: 'qing_early',
+    name: '清朝前期',
+    dynasty: '清',
+    startYear: 1644,
+    endYear: 1840,
+    defaultYear: 1700,
+    capital: '北京',
+    currency: '两银',
+    money: 22,
+    description:
+      '1644 年清军入关至 1840 年鸦片战争前。八旗、满汉双轨、军机处、海禁与边疆经营共同构成一个疆域辽阔而等级森严的帝国；开局年份决定你处在顺康、雍乾还是嘉道。',
+    rules:
+      '严格使用清代制度与生活：八旗、满汉关系、内阁与军机处、督抚、科举、海禁与广州十三行、白银与铜钱、疆域经营。不得出现晚清才有的条约体系、近代工业与民族国家观念；旗人、汉人、蒙古与西藏各有不同法律与身份。',
+    periods: [
+      ['顺康', 1644, 1722, '入关、平定三藩、统一台湾、雅克萨与多伦会盟，帝国疆域与制度逐步定型。'],
+      ['雍乾', 1723, 1795, '军机处强化皇权，改土归流、平定准部，人口与白银经济膨胀。'],
+      ['嘉道', 1796, 1840, '白莲教、天理教与鸦片问题暴露财政与吏治危机，鸦片战争前夜。'],
+    ],
+    events: [
+      [1644, '清军入关', '吴三桂引清军入关，顺治帝迁都北京。'],
+      [1681, '平定三藩', '康熙帝平定吴三桂等三藩，中央权威加强。'],
+      [1729, '设军机处', '雍正帝设军机处，政务决策进一步集中。'],
+      [1793, '马戛尔尼使华', '英国使团到热河，礼仪与通商冲突显现。'],
+      [1840, '鸦片战争', '英国发动鸦片战争，清朝被迫进入近代。'],
+    ],
+    entries: [
+      [
+        '八旗与满汉双轨',
+        ['八旗', '满汉', '旗人', '内阁', '军机处'],
+        '清朝以八旗为军事与身份核心，旗人享有俸饷、旗地与司法特权；汉人通过科举、捐纳与幕府进入官僚体系。内阁、军机处与六部并存，皇帝通过密折与军机章京直接控制督抚。满汉、旗民、主佃之间的身份差异会直接影响行动。',
+      ],
+      [
+        '北京、海禁与白银',
+        ['北京', '广州', '十三行', '海禁', '白银', '物价'],
+        '北京是宫城、衙门与旗营的中心，广州十三行垄断对外贸易。白银是财政与大额交易的基础，铜钱用于日常；海禁与迁界在沿海留下深刻记忆。普通农户承担地丁、漕粮与差徭，旗人与官员则依赖俸禄、旗地和灰色收入。',
+      ],
+    ],
+    scenarios: [
+      {
+        title: '京师笔帖式',
+        description: '在内阁或部院抄写满汉文书的笔帖式，熟悉公文，也看见旗人与汉官之间的暗流。',
+        location: '北京·内阁',
+        opening:
+          '部院里的满汉文卷堆到案头，{player}发现一份关于旗地圈占的题本被改了数字。满尚书要求你按改后的数字誊清，汉侍郎却让你先别用印。宫里的军机章京催着要副本，而城外旗营的披甲人正在等这笔地租。',
+        choices: ['按满尚书要求誊清', '先听汉侍郎的处置', '把原卷藏起来，等军机处来人'],
+        money: 22,
+        realm: '笔帖式',
+        titleLabel: '京师笔帖式',
+        template: 'civil',
+        yearStart: 1644,
+        yearEnd: 1840,
+      },
+      {
+        title: '广州行商',
+        description: '广州十三行附近的行商伙计，替洋商与官府传话，也替自己攒本钱。',
+        location: '广州·十三行',
+        opening:
+          '珠江口的洋船又到了一批呢绒，{player}替行商核对货单，发现其中一箱的税银被记成了“损耗”。海关吏员在门外等着抽验，洋商却悄悄递来一张写满英文的纸条。更重要的是，官府刚下令下一季的茶叶只能由指定行商承销。',
+        choices: ['按货单申报，不碰私货', '替洋商压下那箱货', '先找海关吏员探口风'],
+        money: 30,
+        realm: '行商伙计',
+        titleLabel: '广州行商伙计',
+        template: 'merchant',
+        yearStart: 1644,
+        yearEnd: 1840,
+      },
+      {
+        title: '直隶庄头',
+        description: '直隶旗地庄园的庄头，替旗人收租，也替庄户挡一层盘剥。',
+        location: '直隶·旗地庄园',
+        opening:
+          '秋收刚过，{player}在庄头院里核对租谷，旗人主子派人来加收一笔“马草银”。庄户们已经凑不出更多粮，有人提出连夜去城里告状。城里来的差役却说，今年旗营也要加饷，谁都不能少。',
+        choices: ['按主子要求加收', '替庄户拖一拖', '带庄户去城里递状'],
+        money: 12,
+        realm: '庄头',
+        titleLabel: '直隶庄头',
+        template: 'commoner',
+        yearStart: 1644,
+        yearEnd: 1840,
+      },
+    ],
+  }),
+
+  makeModernBook({
+    id: 'sb_world_late_qing',
+    key: 'late_qing',
+    name: '晚清',
+    dynasty: '清',
+    startYear: 1840,
+    endYear: 1912,
+    defaultYear: 1860,
+    capital: '北京',
+    currency: '两银',
+    money: 24,
+    description:
+      '1840 年鸦片战争至 1912 年溥仪退位。列强、太平天国、洋务、甲午、戊戌、庚子、新政与辛亥革命接连冲击旧秩序；开局年份决定你处在道咸、同光还是清末。',
+    rules:
+      '严格使用晚清制度与生活：条约口岸、海关、总理衙门、督抚与湘淮军、洋务企业、科举与新学堂、报纸与铁路、白银与赔款。不得把晚清写成已经完成近代化的国家；列强、地方督抚、绅商、会党与革命党都是独立力量。',
+    periods: [
+      ['道咸', 1840, 1861, '鸦片战争、太平天国、第二次鸦片战争，旧秩序第一次全面动摇。'],
+      ['同光', 1862, 1894, '洋务运动、同治中兴、甲午战争，器物改革未能挽救制度危机。'],
+      ['清末', 1895, 1912, '戊戌、庚子、新政、立宪与辛亥革命，清帝国最终退位。'],
+    ],
+    events: [
+      [1840, '鸦片战争', '英国发动鸦片战争，清朝战败，签订《南京条约》。'],
+      [1851, '太平天国', '洪秀全在广西起事，太平军席卷江南。'],
+      [1861, '总理衙门', '清政府设立总理各国事务衙门，洋务运动开始。'],
+      [1894, '甲午战争', '清军在海陆战场败于日本，洋务运动受挫。'],
+      [1900, '庚子之变', '义和团与八国联军攻入北京，清廷被迫改革。'],
+      [1911, '辛亥革命', '武昌起义爆发，各省响应，清帝退位。'],
+    ],
+    entries: [
+      [
+        '条约、督抚与湘淮军',
+        ['条约', '总理衙门', '督抚', '湘军', '淮军', '海关'],
+        '晚清的中央权威被条约体系、地方督抚与赔款财政同时削弱。总理衙门与海关处理对外事务，湘军、淮军与北洋新军成为实际军事力量。督抚在地方拥有财政、军事与人事权，绅商与会党填补基层真空。',
+      ],
+      [
+        '口岸、洋务与新旧之争',
+        ['上海', '天津', '洋务', '铁路', '报纸', '新学堂'],
+        '上海、天津、广州等口岸出现租界、洋行、海关与报纸，洋务企业引入机器、电报与铁路。科举、书院与新学堂并存，士人分为守旧、洋务与维新不同阵营。普通人的生活被赔款、厘金、灾荒与兵灾反复冲击。',
+      ],
+    ],
+    scenarios: [
+      {
+        title: '北洋幕僚',
+        description: '在李鸿章或袁世凯幕府中办理洋务、军务与对外交涉的幕僚。',
+        location: '天津·北洋幕府',
+        opening:
+          '天津机器局的账册刚送到，{player}就发现一笔采购款被同时记在海军与铁路名下。幕府主人正在与洋人谈判借款，朝廷的御史却在打听“是否以夷变夏”。一封来自京城的密电要求你今晚之前拟好复奏，措辞稍有不慎就会成为攻讦的把柄。',
+        choices: ['按实情拟复奏', '替幕府遮掩那笔款', '先去见洋人顾问探底'],
+        money: 28,
+        realm: '幕僚',
+        titleLabel: '北洋幕僚',
+        template: 'civil',
+        yearStart: 1861,
+        yearEnd: 1912,
+      },
+      {
+        title: '淮军哨官',
+        description: '淮军或北洋新军中的哨官，夹在旧式营制与新式操典之间。',
+        location: '天津·淮军营',
+        opening:
+          '新到的洋枪比旧枪轻了一半，{player}的哨队却还按旧营制发饷。营官要求把新枪先拨给亲信，德国教习却坚持全营统一操练。与此同时，海上传来消息：日本舰队正在集结，北洋水师的煤和弹都只够一次出海。',
+        choices: ['按营官要求拨枪', '支持教习统一操练', '先清点煤弹，准备出海'],
+        money: 18,
+        realm: '哨官',
+        titleLabel: '淮军哨官',
+        template: 'military',
+        yearStart: 1861,
+        yearEnd: 1912,
+      },
+      {
+        title: '上海报馆',
+        description: '上海租界报馆的编辑，替维新、革命与商业报纸写稿，也替自己躲巡捕。',
+        location: '上海·望平街',
+        opening:
+          '报馆的机器还在响，{player}刚把一篇评论排上版，巡捕房的人就进了门，说有人告发报纸“蛊惑人心”。报馆老板让你把标题改软，印刷工却已经印出了第一批。与此同时，一位革命党人送来一篇更激烈的文章，愿出钱买头版。',
+        choices: ['按老板要求改标题', '照原样印出去', '收下革命党的文章'],
+        money: 20,
+        realm: '报馆编辑',
+        titleLabel: '上海报馆编辑',
+        template: 'civil',
+        yearStart: 1895,
+        yearEnd: 1912,
+      },
+      {
+        title: '江南织工',
+        description: '苏州或上海纱厂/织布厂的工人，在机器、工头与家乡之间求生。',
+        location: '上海·纱厂',
+        opening:
+          '纱厂的汽笛响过三遍，{player}在机器间里换完最后一排纱锭，工头却宣布这个月的工钱要扣“押金”。同乡的女工被机器绞伤了手，厂医只给了一包药粉。厂门外，有人正在散发传单，说要组织工友去道台衙门请愿。',
+        choices: ['按工头要求继续上工', '替受伤女工讨说法', '跟传单去请愿'],
+        money: 8,
+        realm: '织工',
+        titleLabel: '江南织工',
+        template: 'commoner',
+        yearStart: 1840,
+        yearEnd: 1912,
+      },
+    ],
+  }),
+
+  makeModernBook({
+    id: 'sb_world_republic',
+    key: 'republic',
+    name: '民国',
+    dynasty: '民国',
+    startYear: 1912,
+    endYear: 1949,
+    defaultYear: 1927,
+    capital: '南京',
+    currency: '银元',
+    money: 30,
+    description:
+      '1912 年民国建立至 1949 年。世界书范围覆盖民初、军阀、北伐、抗战与内战；主线与推荐开局从 1927 年南昌起义开始，1912–1926 作为前史与过渡阶段。',
+    rules:
+      '严格使用民国制度与生活：共和、军阀、国民党、共产党、工人运动、学生运动、抗战、通货膨胀与基层组织。不得把民国写成单一政权或现代国家；北洋政府、国民政府、根据地、租界、地方军阀与侵华日军同时存在。重大历史人物必须按其真实活跃年份出现。',
+    periods: [
+      ['民初', 1912, 1926, '共和初建、袁世凯与北洋军阀、五四运动、国民革命。'],
+      ['北伐', 1927, 1936, '南昌起义、国共分裂、南京国民政府、土地革命与围剿。'],
+      ['抗战', 1937, 1945, '全面抗战、国共合作、沦陷区与根据地、国际反法西斯战争。'],
+      ['内战', 1946, 1949, '国共内战、通货膨胀、三大战役与中华人民共和国成立。'],
+    ],
+    events: [
+      [1912, '民国建立', '清帝退位，中华民国成立，袁世凯任临时大总统。'],
+      [1927, '南昌起义', '中国共产党在南昌发动武装起义，独立领导武装斗争。'],
+      [1931, '九一八事变', '日本关东军发动九一八事变，侵占东北。'],
+      [1937, '全面抗战', '七七事变爆发，中国进入全面抗日战争。'],
+      [1945, '抗战胜利', '日本宣布投降，中国抗日战争胜利。'],
+      [1949, '新中国成立', '中华人民共和国成立，国民党政权退往台湾。'],
+    ],
+    entries: [
+      [
+        '政权、军阀与革命',
+        ['北洋', '国民政府', '国民党', '共产党', '军阀', '根据地'],
+        '民国政治由北洋政府、国民政府、地方军阀、国民党与共产党等多重力量构成。军阀以军队、地盘与财税收割地方；国民党在南京建立政权，共产党在根据地实行土地革命与群众动员。任何政治行动都受组织、情报、财政与地方势力制约。',
+      ],
+      [
+        '城市、乡村与战争',
+        ['上海', '南京', '武汉', '延安', '银元', '法币', '难民'],
+        '上海、南京、武汉等城市有租界、工厂、报馆、学校与舞厅；乡村则受地租、灾荒、兵灾与宗族支配。银元、法币与根据地货币并行，通货膨胀会迅速改变物价。战争制造难民、封锁与物资短缺，普通人的选择空间极小。',
+      ],
+    ],
+    scenarios: [
+      {
+        title: '南昌起义',
+        description: '1927 年南昌起义前后的革命军人/政工干部，在起义、转移与组织重建之间抉择。',
+        location: '南昌·旧城',
+        opening:
+          '南昌城里的枪声还没停，{player}所在部队已经按计划控制了城门。上级要求在天亮前撤出城，向广东转移；可城内的伤员、弹药和一部分尚未联系上的部队都还没有着落。有人主张留下来建立根据地，有人坚持按原定计划南下。',
+        choices: ['按原计划组织撤退', '留下来收拢失散部队', '先去找地方党组织求援'],
+        money: 30,
+        realm: '革命军人',
+        titleLabel: '南昌起义参与者',
+        template: 'military',
+        yearStart: 1927,
+        yearEnd: 1927,
+      },
+      {
+        title: '上海报馆',
+        description: '上海租界报馆的记者/编辑，在国民党、共产党、租界与读者之间寻找发声空间。',
+        location: '上海·望平街',
+        opening:
+          '报馆的排字房刚排好一篇关于工人罢工的报道，{player}就收到两封警告信：一封来自租界巡捕房，一封来自国民党市党部。主编要求把“罢工”改成“劳资纠纷”，印刷工却已经印出了号外。与此同时，一位地下党联系人约你今晚在弄堂口见面。',
+        choices: ['按主编要求改稿', '照原样发行号外', '去见地下党联系人'],
+        money: 26,
+        realm: '报馆编辑',
+        titleLabel: '上海报馆编辑',
+        template: 'civil',
+        yearStart: 1927,
+        yearEnd: 1937,
+      },
+      {
+        title: '陕北村干部',
+        description: '陕北根据地的村干部，负责征粮、支前、减租与动员，夹在群众、军队与上级之间。',
+        location: '陕北·村庄',
+        opening:
+          '村里刚开完减租会，{player}就被叫去乡政府：前线需要一批粮食和担架队，三天内必须凑齐。几户贫雇农愿意出人，富农却把粮藏进了山洞。更麻烦的是，邻村的自卫队和国民党地方武装都在附近活动，消息一旦走漏，整个村子都会被报复。',
+        choices: ['按上级任务强行征粮', '先做通群众工作', '组织民兵防备附近武装'],
+        money: 10,
+        realm: '村干部',
+        titleLabel: '陕北村干部',
+        template: 'commoner',
+        yearStart: 1935,
+        yearEnd: 1949,
+      },
+      {
+        title: '重庆商人',
+        description: '抗战时期重庆的商人，在物资管制、通货膨胀与官商关系之间做生意。',
+        location: '重庆·朝天门',
+        opening:
+          '朝天门的货船刚靠岸，{player}就发现一批药品被军需处先征走了一半。账房说，法币又跌了，昨天的进价今天已经不够本。一个穿中山装的官员愿意批一张特别通行证，条件是让他的亲戚入股。码头外，难民和伤兵正等着下一班船。',
+        choices: ['接受官员的条件', '按原价把药卖给医院', '把货转去黑市'],
+        money: 40,
+        realm: '商人',
+        titleLabel: '重庆商人',
+        template: 'merchant',
+        yearStart: 1937,
+        yearEnd: 1945,
+      },
+    ],
+  }),
+];

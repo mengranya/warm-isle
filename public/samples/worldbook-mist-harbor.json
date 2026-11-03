@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "kind": "warm-isle.worldbook",
+  "id": "world_sample_mist_harbor",
+  "name": "雾屿镇",
+  "description": "一座被海雾包围的南方旧港小镇。时间在这里流得很慢，石板路、旧书店、潮汐和未寄出的信共同构成了日常。",
+  "tags": ["治愈", "海边", "慢生活", "轻悬疑"],
+  "entries": [
+    {
+      "id": "wh_sample_geo",
+      "title": "地理与气候",
+      "keywords": ["雾屿", "海", "港口", "天气", "雨", "潮汐"],
+      "content": "雾屿镇位于南海岸线的凹湾里，常年起薄雾。春夏多雨，石板路湿漉漉的；秋冬海风大，港口会亮起一排昏黄的灯。涨潮时钟楼的声音能传遍半个镇子。",
+      "pinned": true,
+      "priority": 100
+    },
+    {
+      "id": "wh_sample_places",
+      "title": "重要地点",
+      "keywords": ["书店", "白昼书店", "灯塔", "码头", "咖啡馆", "旧街"],
+      "content": "白昼书店在旧街尽头，门口有一棵很大的榕树；码头边有一家只开夜间的甜汤铺；废弃灯塔在镇北礁石上，传说曾经有人在里面住过整个冬天。",
+      "pinned": true,
+      "priority": 90
+    },
+    {
+      "id": "wh_sample_rumor",
+      "title": "隐秘传闻",
+      "keywords": ["传闻", "失踪", "信", "灯塔", "秘密"],
+      "content": "十年前有位邮差在雾夜里失踪，此后偶尔有人收到没有邮戳的旧信。镇上的老人不愿谈论这件事，只说有些信是海替人送回来的。",
+      "pinned": false,
+      "priority": 70
+    }
+  ],
+  "builtin": false,
+  "createdAt": "2026-01-01T08:00:00.000Z"
+}

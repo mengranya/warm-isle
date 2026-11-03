@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7efe4" />
+    <title>暖屿 · 暂时离线</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #f7efe4;
+        color: #4e4035;
+        font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+      main {
+        width: min(420px, 100%);
+        padding: 28px;
+        border: 1px solid #eadbc9;
+        border-radius: 22px;
+        background: #fffdf8;
+        text-align: center;
+        box-shadow: 0 18px 50px -36px rgba(74, 46, 33, 0.6);
+      }
+      .sun {
+        width: 46px;
+        height: 46px;
+        margin: 0 auto 16px;
+        border-radius: 50%;
+        background: #d98b6a;
+        box-shadow: 18px 10px 0 -9px #7a9a7a;
+      }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      p { margin: 0; color: #8b7b6d; line-height: 1.8; font-size: 13px; }
+      a {
+        display: inline-block;
+        margin-top: 18px;
+        padding: 9px 18px;
+        border-radius: 999px;
+        background: #b56f52;
+        color: #fff;
+        text-decoration: none;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="sun" aria-hidden="true"></div>
+      <h1>暖屿暂时离线</h1>
+      <p>当前没有网络连接。对话和 AI 推演需要联网；已保存在本机的存档不会丢失。</p>
+      <a href="/">重新连接</a>
+    </main>
+  </body>
+</html>

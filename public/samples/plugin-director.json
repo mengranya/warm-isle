@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "kind": "warm-isle.plugin",
+  "id": "plugin_sample_cinematic",
+  "name": "电影感叙事",
+  "description": "让每个回合更有画面感：用具体的动作、环境与感官细节推进场景，避免空泛抒情。",
+  "author": "暖屿示例",
+  "version": "1.0.0",
+  "prompt": "每次回复至少包含一个可被看见或听见的具体细节（动作、物件、声音、光线）。用行动和感官描写代替空泛的情绪总结；不要堆砌形容词，不写「仿佛时间静止」之类的陈词。场景推进要小而明确。",
+  "enabled": false,
+  "priority": 90,
+  "builtin": false,
+  "createdAt": "2026-01-01T08:00:00.000Z"
+}
