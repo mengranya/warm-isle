@@ -69,6 +69,7 @@ export async function render(root, app) {
     state.sandboxWorldbooks.find((book) => book.category === categoryId) ||
     state.sandboxWorldbooks[0];
   let year = worldbook?.era?.enabled ? worldbook.era.defaultYear : worldbook?.defaults?.date?.year || 1;
+  let month = Math.max(1, Math.min(12, Math.round(Number(worldbook?.defaults?.date?.month) || 1)));
   let scenarioId = worldbook?.scenarios?.[0]?.id || CUSTOM_SCENARIO_ID;
   let difficultyId = 'normal';
   let templateId = 'commoner';
@@ -585,6 +586,7 @@ export async function render(root, app) {
     year = worldbook?.era?.enabled
       ? worldbook.era.defaultYear
       : worldbook?.defaults?.date?.year || 1;
+    month = Math.max(1, Math.min(12, Math.round(Number(worldbook?.defaults?.date?.month) || 1)));
     templateId = 'commoner';
     currentAttributes = createDefaultAttributes(
       currentBudget(),
@@ -628,6 +630,7 @@ export async function render(root, app) {
     year = worldbook?.era?.enabled
       ? worldbook.era.defaultYear
       : worldbook?.defaults?.date?.year || 1;
+    month = Math.max(1, Math.min(12, Math.round(Number(worldbook?.defaults?.date?.month) || 1)));
     renderBookDetail();
     renderYearPanel();
     renderScenarios();
@@ -675,7 +678,7 @@ export async function render(root, app) {
             'div',
             {},
             h('strong', { text: '架空纪年' }),
-            h('p', { text: `本世界从 ${worldbook?.defaults?.date?.year || 1} 年开始，年份会随行动推进。` }),
+            h('p', { text: `本世界从 ${worldbook?.defaults?.date?.year || 1} 年 ${worldbook?.defaults?.date?.month || 1} 月开始，时间会随行动推进。` }),
           ),
         ),
       );
@@ -701,6 +704,21 @@ export async function render(root, app) {
       value: year,
       class: 'sandbox-year-input',
     });
+    const monthSelect = h(
+      'select',
+      {
+        class: 'input select sandbox-month-select',
+        id: 'sb-month',
+        'aria-label': '选择月份',
+      },
+      ...Array.from({ length: 12 }, (_, index) =>
+        h('option', {
+          value: String(index + 1),
+          text: `${index + 1} 月`,
+          selected: index + 1 === month,
+        }),
+      ),
+    );
 
     const setYear = (value, source = null) => {
       year = Math.max(
@@ -714,8 +732,16 @@ export async function render(root, app) {
       renderScenarios();
       updatePreview();
     };
+    const setMonth = (value) => {
+      month = Math.max(1, Math.min(12, Math.round(Number(value) || 1)));
+      monthSelect.value = String(month);
+      clearVerdict();
+      renderYearReadout();
+      updatePreview();
+    };
     number.addEventListener('change', () => setYear(number.value, number));
     range.addEventListener('input', () => setYear(range.value, range));
+    monthSelect.addEventListener('change', () => setMonth(monthSelect.value));
 
     const yearReadout = h('div', { class: 'sandbox-year-readout' });
     function renderYearReadout() {
@@ -728,7 +754,7 @@ export async function render(root, app) {
             class: 'sandbox-year-number',
             text: formatHistoricalYearShort(year),
           }),
-          h('strong', { text: resolved?.yearLabel || formatHistoricalYear(year) }),
+          h('strong', { text: `${resolved?.yearLabel || formatHistoricalYear(year)} · ${month} 月` }),
           h('p', { text: resolved?.period?.summary || '该年份没有额外分期摘要。' }),
           resolved?.recentEvents?.length
             ? h(
@@ -755,14 +781,14 @@ export async function render(root, app) {
         h(
           'div',
           {},
-          h('h3', { text: `${era.label || era.dynasty} · 选择年份` }),
+          h('h3', { text: `${era.label || era.dynasty} · 选择年份与月份` }),
           h('p', {
-            text: `${formatHistoricalYearRange(era.startYear, era.endYear)} 年。历史背景只加载当前年份及以前的内容。`,
+            text: `${formatHistoricalYearRange(era.startYear, era.endYear)} 年。年份用时间轴，月份用右侧小框；历史背景只加载当前年份及以前的内容。`,
           }),
         ),
         h('span', { class: 'sandbox-year-badge' }, icon('scroll'), h('span', { text: era.dynasty || '历史' })),
       ),
-      h('div', { class: 'sandbox-year-controls' }, number, range),
+      h('div', { class: 'sandbox-year-controls' }, number, range, monthSelect),
       h(
         'div',
         { class: 'sandbox-year-quick' },
@@ -1010,8 +1036,8 @@ export async function render(root, app) {
       categoryId === 'historical' ? currentTemplate().label : '',
       worldbook?.name,
       resolved
-        ? resolved.yearLabel
-        : formatHistoricalYear(worldbook?.defaults?.date?.year || 1),
+        ? `${resolved.yearLabel} · ${month}月`
+        : `${formatHistoricalYear(worldbook?.defaults?.date?.year || 1)} ${month}月`,
       getSandboxDifficulty(difficultyId).label,
     ]
       .filter(Boolean)
@@ -1033,7 +1059,7 @@ export async function render(root, app) {
       scenario?.fixedFigure
         ? h('small', {
             class: 'sandbox-preview-note',
-            text: `进入时将由 AI 按 ${resolved?.yearLabel || formatHistoricalYear(worldbook?.defaults?.date?.year || 1)} 与人物身份推演专属开场，不使用通用模板。`,
+            text: `进入时将由 AI 按 ${resolved?.yearLabel || formatHistoricalYear(worldbook?.defaults?.date?.year || 1)} ${month} 月与人物身份推演专属开场，不使用通用模板。`,
           })
         : null,
     );
@@ -1303,6 +1329,7 @@ export async function render(root, app) {
       worldbook,
       categoryId,
       year,
+      month,
       scenario,
       player: persistPlayerDraft(),
     });
@@ -1408,6 +1435,7 @@ export async function render(root, app) {
         worldbook,
         scenario,
         year,
+        month,
         player: persistPlayerDraft(),
         difficulty: getSandboxDifficulty(difficultyId),
       });
@@ -1505,6 +1533,7 @@ export async function render(root, app) {
         category: categoryId,
         worldbook,
         year,
+        month,
         scenario,
         player: persistPlayerDraft(),
         difficulty: difficultyId,

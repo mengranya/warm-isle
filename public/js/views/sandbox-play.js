@@ -58,7 +58,7 @@ import {
   applySandboxStatePatch,
   createSandboxChronicle,
   formatGameDate,
-  formatHistoricalYear,
+  formatHistoricalYearMonth,
   sandboxSaveFilename,
 } from '../data/sandbox-schemas.js';
 import { richText } from '../ui/components.js';
@@ -260,8 +260,8 @@ export async function render(root, app) {
     save = currentSave();
     headerTitle.textContent = save.name;
     const yearLabel = worldbook?.era?.enabled
-      ? formatHistoricalYear(save.world.date.year)
-      : `${save.world.date.year} 年`;
+      ? formatHistoricalYearMonth(save.world.date.year, save.world.date.month)
+      : `${save.world.date.year} 年 ${save.world.date.month} 月`;
     headerMeta.replaceChildren(
       h('span', {}, icon('scroll'), h('span', { text: worldbook?.name || '世界书已移除' })),
       h('span', {}, icon('clock'), h('span', { text: `${yearLabel} ${save.world.time}` })),

@@ -18,9 +18,11 @@ export function buildHistoricalOpeningPrompt({
   worldbook,
   scenario,
   year,
+  month,
   player,
   difficulty,
 }) {
+  const monthValue = Math.max(1, Math.min(12, Math.round(Number(month) || 1)));
   const category = getSandboxCategory(worldbook?.category || 'historical');
   const fixed = scenario?.fixedFigure || {};
   const template = getHistoricalTemplate(fixed.template || player?.template || 'commoner');
@@ -31,7 +33,8 @@ export function buildHistoricalOpeningPrompt({
     .join('\n');
   const system = [
     '你是历史沙盒的「开场推演器」，只负责为一个固定历史人物生成开场，不写后续剧情。',
-    '必须严格贴近该人物所在年份的真实处境，不能把不同年代、不同年龄、不同朝局套进同一模板。',
+    '必须严格贴近该人物所在年份与月份的真实处境，不能把不同年代、不同季节、不同年龄、不同朝局套进同一模板。',
+    '月份决定季节、农时、节令、道路与军事节奏；开场必须体现该月份的气候、物候和当月事务，不能把冬月写成盛夏。',
     '先判断：在位第几年、即位是否合法稳固、支持者与反对者是谁、财政与军力如何、当前最大的真实议题是什么。',
     '不要为了制造困难而制造困难。太子地位稳固、继位合法、支持者占优时，登基后的常态是朝臣服从与政务运转，不是人人阴谋。',
     '不臣、逼宫、政变、大规模阳奉阴违必须有前置矛盾、利益冲突、把柄或外部压力，并在开场中留下可追溯线索。',
@@ -48,7 +51,8 @@ export function buildHistoricalOpeningPrompt({
     `【世界书】${worldbook?.name || category.label}`,
     `【人物】${fixed.name || player?.name || '未定'}`,
     `【身份】${fixed.title || player?.identity || '未定'}；模板：${template.label}`,
-    `【年份】${year}${year < 0 ? '（公元前）' : ''}`,
+    `【年份】${year}${year < 0 ? '（公元前）' : ''} 年 ${monthValue} 月`,
+    `【季节提示】按 ${monthValue} 月判断气候、农时、节令与当月朝局/战事节奏。`,
     `【年龄】${fixed.age || player?.age || '未知'}`,
     `【难度】${difficulty?.label || '标准'}`,
     `【人物简介】${truncateText(fixed.description || player?.background || '', 300)}`,
@@ -66,6 +70,7 @@ export function buildHistoricalOpeningPrompt({
     ],
     meta: {
       year,
+      month: monthValue,
       figure: fixed.name || player?.name || '',
       template: template.id,
     },

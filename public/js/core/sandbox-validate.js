@@ -44,14 +44,17 @@ export function buildOpeningValidationPrompt({
   worldbook,
   categoryId,
   year,
+  month,
   scenario,
   player,
 }) {
   const category = getSandboxCategory(categoryId || worldbook?.category);
+  const monthValue = Math.max(1, Math.min(12, Math.round(Number(month) || 1)));
   const era = resolveHistoricalEra(worldbook, year);
   const historical = era
     ? [
-        `历史年份：${era.yearLabel}`,
+        `历史年份：${era.yearLabel} · ${monthValue} 月`,
+        `季节/月份约束：按 ${monthValue} 月判断气候、物候、农时与节令，不能写成其他季节。`,
         era.period?.summary ? `时代阶段：${era.period.summary}` : '',
         era.recentEvents?.length
           ? `当前年份及以前已发生的史事：${era.recentEvents

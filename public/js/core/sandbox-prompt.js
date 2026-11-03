@@ -154,10 +154,12 @@ function buildSandboxQuery(save, worldbook, action) {
 function formatHistoricalContext(worldbook, save) {
   if (!worldbook?.era?.enabled) return '';
   const rawYear = save.world?.date?.year || worldbook.era.defaultYear;
+  const rawMonth = Math.max(1, Math.min(12, Math.round(Number(save.world?.date?.month) || 1)));
   const resolved = resolveHistoricalEra(worldbook, rawYear);
   if (!resolved) return '';
   const lines = [
-    `当前纪年：${resolved.yearLabel}；所处阶段：${resolved.period?.name || '未分期'}`,
+    `当前纪年：${resolved.yearLabel}；当前月份：${rawMonth} 月；所处阶段：${resolved.period?.name || '未分期'}`,
+    `月份约束：按 ${rawMonth} 月判断季节、气候、农时、节令、道路与军事节奏；不得把月份对应的物候写错。`,
     resolved.period?.summary ? `时代背景：${resolved.period.summary}` : '',
     resolved.recentEvents.length
       ? `当前年份及之前近年的真实史事（仅作世界背景，不要当作玩家必须遵循的剧本）：\n${resolved.recentEvents
@@ -386,6 +388,7 @@ export function buildSandboxPrompt({
       category: category.id,
       difficulty: difficulty.id,
       historicalYear: worldbook?.era?.enabled ? save.world?.date?.year : null,
+      historicalMonth: worldbook?.era?.enabled ? save.world?.date?.month : null,
       historyMessages: history.messages.length,
       historyChars: history.chars,
       worldEntries: worldSelection.selected.map((entry) => entry.title),

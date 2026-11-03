@@ -12,7 +12,7 @@ import {
 } from '../core/utils.js';
 import {
   exportSandboxWorldbookPayload,
-  formatHistoricalYear,
+  formatHistoricalYearMonth,
   formatHistoricalYearRange,
   prepareSandboxWorldbookImport,
   sandboxWorldbookFilename,
@@ -409,7 +409,10 @@ function viewWorldbook(app, worldbook) {
               text: `可选择年份：${formatHistoricalYearRange(
                 era.startYear,
                 era.endYear,
-              )} 年；推荐开局：${formatHistoricalYear(era.defaultYear)}。`,
+              )} 年；推荐开局：${formatHistoricalYearMonth(
+                era.defaultYear,
+                worldbook.defaults?.date?.month || 1,
+              )}。`,
             }),
             h(
               'div',

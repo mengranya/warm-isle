@@ -977,6 +977,14 @@ button.sandbox-quick-link {
   font-weight: 700;
 }
 
+.sandbox-month-select {
+  width: 82px;
+  flex: 0 0 82px;
+  padding-right: 5px;
+  text-align: center;
+  font-weight: 700;
+}
+
 .sandbox-year-range {
   flex: 1;
   accent-color: #b47c4f;
@@ -2926,6 +2934,7 @@ button.sandbox-quick-link {
 
   .sandbox-play-layout {
     display: flex;
+    flex: 0 0 auto;
     flex-direction: column;
     min-height: 0;
   }
@@ -2948,6 +2957,7 @@ button.sandbox-quick-link {
   }
 
   .sandbox-status-pane {
+    flex: 0 0 auto;
     overflow: visible;
     padding-right: 0;
   }
@@ -3019,9 +3029,25 @@ button.sandbox-quick-link {
   }
 
   .sandbox-story-pane {
-    height: calc(100dvh - 305px);
-    min-height: 300px;
+    height: auto;
+    min-height: 0;
+    flex: 0 0 auto;
     border-radius: 16px;
+  }
+
+  .sandbox-story-feed {
+    flex: 0 0 auto;
+    height: clamp(190px, 27dvh, 300px);
+  }
+
+  .sandbox-year-input {
+    width: 96px;
+    flex: 0 0 96px;
+  }
+
+  .sandbox-month-select {
+    width: 72px;
+    flex: 0 0 72px;
   }
 
   .sandbox-narrative-body {

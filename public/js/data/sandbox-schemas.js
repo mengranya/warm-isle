@@ -640,6 +640,12 @@ export function formatHistoricalYearShort(year) {
   return value < 0 ? `前${Math.abs(value)}` : String(value || 1);
 }
 
+/** 年份 + 月份；历史开局只精确到月，日默认沿用世界书。 */
+export function formatHistoricalYearMonth(year, month) {
+  const value = Math.round(clamp(safeNumber(month, 1), 1, 12));
+  return `${formatHistoricalYear(year)} ${value}月`;
+}
+
 /** 区间写法：前2070–前1600 / 前202–9 / 618–907。 */
 export function formatHistoricalYearRange(startYear, endYear) {
   const start = Math.round(safeNumber(startYear, 1));
@@ -775,6 +781,7 @@ export function normalizeSandboxSave(input, { worldbookIds = null, index = 0 } =
         HISTORICAL_YEAR_MAX,
       ),
     ),
+    initialMonth: Math.round(clamp(safeNumber(input.initialMonth, world.date.month), 1, 12)),
     scenarioId: asString(input.scenarioId, '', 80),
     difficulty: SANDBOX_DIFFICULTIES.some((item) => item.id === input.difficulty)
       ? input.difficulty
@@ -801,6 +808,7 @@ export function createSandboxSave({
   category,
   worldbook,
   year,
+  month,
   scenario,
   player,
   difficulty = 'normal',
@@ -815,6 +823,7 @@ export function createSandboxSave({
   const date = {
     ...defaultDate,
     year: era?.year || defaultDate.year,
+    month: Math.round(clamp(safeNumber(month, defaultDate.month), 1, 12)),
   };
   const selectedScenario =
     scenario ||
@@ -853,6 +862,7 @@ export function createSandboxSave({
   const opening = String(openingSource || '')
     .replaceAll('{player}', playerName)
     .replaceAll('{year}', String(date.year))
+    .replaceAll('{month}', String(date.month))
     .replaceAll('{location}', selectedScenario.location || worldbook.defaults?.location || '未知之地');
 
   const worldState = normalizeSandboxWorldState(
@@ -936,6 +946,7 @@ export function createSandboxSave({
     category: safeCategory.id,
     worldbookId: worldbook.id,
     initialYear: date.year,
+    initialMonth: date.month,
     scenarioId: selectedScenario.id || '',
     difficulty: safeDifficulty.id,
     checksEnabled: Boolean(checksEnabled),

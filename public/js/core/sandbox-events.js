@@ -261,6 +261,8 @@ export function buildEventMonitorPrompt({
     `【世界书】${worldbook?.name || '未绑定'}`,
     `【难度】${difficulty?.label || '标准'}（${ultra ? '超拟真' : '绝对诚实'}）`,
     `【当前回合】${save.turn}`,
+    `【当前时间】${save.world?.date?.year ?? '未知'} 年 ${save.world?.date?.month ?? 1} 月 ${save.world?.date?.day ?? 1} 日 ${save.world?.time || ''}`,
+    `【月份约束】按当前月份判断季节、农时、节令、道路与军事节奏，事件进展不得脱离该季节。`,
     `【玩家】${save.player?.name || '无名旅人'}；身份：${save.player?.identity || '未定'}；模板：${templateLabel}`,
     `【当前能力】${abilities
       .map((ability) => `${ability.label} ${save.player?.attributes?.[ability.key] ?? 9}`)
