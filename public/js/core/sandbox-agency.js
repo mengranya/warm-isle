@@ -16,6 +16,24 @@ const ACTION_WORDS =
 const DECISION_WORDS =
   /(便算定了|算定了|已经决定|已经同意|已经下令|将话头按下|不再争拗|分派下去)/;
 
+function splitSentences(text) {
+  const source = String(text || '');
+  const result = [];
+  let start = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    if ('。！？!?；;\n'.includes(source[index])) {
+      const sentence = source.slice(start, index + 1);
+      if (sentence.trim()) result.push(sentence);
+      start = index + 1;
+    }
+  }
+  if (start < source.length) {
+    const sentence = source.slice(start);
+    if (sentence.trim()) result.push(sentence);
+  }
+  return result;
+}
+
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -25,7 +43,7 @@ export function detectPlayerAgency(narrative, playerName = '') {
   if (!text) return { risky: false, evidence: [] };
   const evidence = [];
   const name = String(playerName || '').trim();
-  const sentences = text.split(/(?<=[。！？!?；;\n])/).filter(Boolean);
+  const sentences = splitSentences(text);
   for (const sentence of sentences) {
     const hasName = name && sentence.includes(name);
     const hasYou = /(^|[，。！？；;\s])你(?=[^，。！？；;\s])/.test(sentence);
@@ -83,7 +101,7 @@ export function parseAgencyRewrite(raw) {
 /** 校正调用失败时的保守兜底：删除明显的玩家代行句，保留世界与 NPC 信息。 */
 export function stripPlayerAgency(narrative, playerName = '') {
   const text = String(narrative || '');
-  const sentences = text.split(/(?<=[。！？!?；;\n])/).filter(Boolean);
+  const sentences = splitSentences(text);
   const name = String(playerName || '').trim();
   const kept = sentences.filter((sentence) => {
     const hasName = name && sentence.includes(name);

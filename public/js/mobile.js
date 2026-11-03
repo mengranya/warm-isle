@@ -10,6 +10,21 @@
  */
 
 (() => {
+  // iOS 15.4 以下没有 Array.prototype.at；补一个等价实现。
+  if (typeof Array.prototype.at !== 'function') {
+    Object.defineProperty(Array.prototype, 'at', {
+      configurable: true,
+      writable: true,
+      value(index) {
+        const length = this.length >>> 0;
+        if (!length) return undefined;
+        let position = Math.trunc(Number(index)) || 0;
+        if (position < 0) position += length;
+        return position >= 0 && position < length ? this[position] : undefined;
+      },
+    });
+  }
+
   const root = document.documentElement;
   const coarse = window.matchMedia?.('(pointer: coarse)');
   let lastVisualHeight = window.visualViewport?.height || window.innerHeight;

@@ -60,12 +60,12 @@ export function parseFlexibleNumber(raw) {
   let sawDigit = false;
 
   for (const char of source) {
-    if (Object.hasOwn(CN_DIGITS, char)) {
+    if (Object.prototype.hasOwnProperty.call(CN_DIGITS, char)) {
       number = CN_DIGITS[char];
       sawDigit = true;
       continue;
     }
-    if (Object.hasOwn(CN_UNITS, char)) {
+    if (Object.prototype.hasOwnProperty.call(CN_UNITS, char)) {
       const unit = CN_UNITS[char];
       if (unit === 10_000) {
         section = (section + (number || 1)) * unit;

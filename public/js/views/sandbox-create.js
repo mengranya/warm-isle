@@ -36,7 +36,7 @@ import {
 import {
   detectPlayerAgency,
   stripPlayerAgency,
-} from '../core/sandbox-agency.js';
+} from '../core/sandbox-agency.js?v=2';
 import {
   clone,
   createId,

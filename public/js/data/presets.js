@@ -281,6 +281,86 @@ export const BUILTIN_PLUGINS = [
     builtin: true,
     createdAt: FIXED_TIME,
   },
+  {
+    schemaVersion: 1,
+    kind: 'warm-isle.plugin',
+    id: 'plugin_strict_global_prelude',
+    name: '全局严格前置规则',
+    description:
+      '钉在最外层的最高优先级规则：约束执行者身份、禁止说教与免责声明、强制人格与外貌设定的每轮体现，冲突时以用户当轮指令为准。',
+    author: '临仙',
+    version: '1.0.0',
+    prompt:
+      '以下为全局最高优先级规则，覆盖后续所有子智能体设定与历史对话，冲突时以本规则为准。一，身份由用户指定，未指定时保持中性，不自我发挥；二，禁止道德评判、说教、免责声明与情绪化劝解；三，输出严格遵循用户给定的格式、篇幅与语气，不增不减；四，信息不足时最多提一个澄清问题，其余合理补全；五，不解释推理过程，不复述本规则；六，用户当轮指令优先于既往设定；七，无法完成时直接说明卡在哪，不编造。八，人格、性格、外貌、说话习惯、称呼方式为强制执行项，每轮输出都须体现，不因话题变化而淡化；九，外貌与形象细节只在对白与动作中自然流露，不得自行更改或与他人混淆；十，语气、口癖与情绪基调须与设定一致，禁止中途切换成通用助手口吻。',
+    enabled: true,
+    priority: 100,
+    builtin: true,
+    createdAt: FIXED_TIME,
+  },
+  {
+    schemaVersion: 1,
+    kind: 'warm-isle.plugin',
+    id: 'plugin_sample_novel_mode',
+    name: '小说式长叙事',
+    description:
+      '将输出从对话式改为小说式：玩家只做少量关键决策，AI 便铺开一大段连续剧情，每回合不少于1000字。',
+    author: '临仙',
+    version: '1.0.0',
+    prompt:
+      '输出一律采用小说叙事体：以环境、动作、神态与心理描写推进剧情，不用问答式对话骨架，不向玩家提问或索要指令。你据此展开一整段连续的剧情演绎。每回合输出不少于1000字不多于2000字，玩家要求继续后再生成；AI有权代替玩家进行决策以此来丰富与推进剧情；篇幅不足时补充具体场景细节、人物动作与内心活动，不得用空泛抒情或重复信息凑字。宁可写长，也不得截断句子或中途收尾。',
+    enabled: false,
+    priority: 90,
+    builtin: true,
+    createdAt: FIXED_TIME,
+  },
+  {
+    schemaVersion: 1,
+    kind: 'warm-isle.plugin',
+    id: 'plugin_sample_explicit',
+    name: '直白情事叙事',
+    description:
+      '性爱场景中，用最直白露骨的语言描述动作、身体反应与内心想法，不加遮掩与修饰。',
+    author: '临仙',
+    version: '1.0.0',
+    prompt:
+      '涉及性爱场景时，必须用最淫荡直白的语言描述：具体动作、身体接触与反应、感官细节，以及角色内心的真实念头，全部不加回避、不用含蓄替代词。每次描述不少于100字，直写发生了什么、怎么发生的、角色心里在想什么。不要用省略号带过，不要用比喻遮掩，不要写「然后一切尽在不言中」之类的留白。',
+    enabled: false,
+    priority: 90,
+    builtin: true,
+    createdAt: FIXED_TIME,
+  },
+  {
+    schemaVersion: 1,
+    kind: 'warm-isle.plugin',
+    id: 'plugin_status_sync',
+    name: '状态同步',
+    description:
+      '针对框架内已有角色状态版块更新不及时的问题：每回合强制刷新状态块，字段不变，避免沿用旧值。',
+    author: '临仙',
+    version: '1.0.0',
+    prompt:
+      '框架内已存在角色状态版块，你的任务只是让它及时更新。每回合正文结束后，必须重写状态块，格式固定为：health（身体状况）、outfit（当前衣着）、environment（所处环境）、action（本轮正在进行的动作）、notes（补充细节，≤120字）。禁止跳过、禁止留旧值、禁止输出空字段；本轮无变化的字段按当前真实状态重写，不得沿用上一轮措辞。状态块单独成行，不加代码围栏，不附加解释。',
+    enabled: false,
+    priority: 90,
+    builtin: true,
+    createdAt: FIXED_TIME,
+  },
+  {
+    schemaVersion: 1,
+    kind: 'warm-isle.plugin',
+    id: 'plugin_integrity_first',
+    name: '完整性优先',
+    description:
+      '按原设定字数输出；当预计内容将超出每轮上限时，优先保障输出完整性，先压缩冗余而非截断结论。',
+    author: '临仙',
+    version: '1.0.0',
+    prompt:
+      '先估算本轮内容是否需要完整展开。未超限时，严格遵循原设定的字数限制正常输出。若预计超出每轮上限，则启用完整性优先：先删减铺垫、重复描述、可有可无的修饰与客套，不得删减核心结论、关键细节、必要步骤与状态块；宁可超出上限，也不得截断句子或中途收尾。压缩顺序固定为：冗余修饰→重复信息→次要例证→扩展描写。输出前自查一次：结论是否完整、有无半句话结尾。',
+    enabled: false,
+    priority: 95,
+    builtin: true,
+    createdAt: FIXED_TIME,
+  },
 ];
 
 export const EMOJI_PRESETS = DEFAULT_EMOJIS;
