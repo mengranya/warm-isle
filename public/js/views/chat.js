@@ -51,7 +51,7 @@ import {
   isNearBottom,
   scrollToBottom,
 } from '../ui/dom.js';
-import { confirmDialog } from '../ui/modal.js';
+import { confirmDialog, openModal } from '../ui/modal.js';
 import { toast, toastError } from '../ui/toast.js';
 
 function combineUsage(left, right) {
@@ -1060,27 +1060,44 @@ export async function render(root, app) {
         : null,
     );
 
-    const actions = h(
-      'div',
-      { class: 'message-actions' },
-      h(
-        'button',
-        {
-          class: 'message-action',
-          type: 'button',
-          title: '复制这段回复',
-          'aria-label': '复制这段回复',
-          onclick: async () => {
-            const ok = await copyText(message.content);
-            toast(ok ? '已复制。' : '复制失败，请手动选择文本。', {
-              type: ok ? 'success' : 'error',
-              duration: 1_800,
-            });
+    const actionButtons = [];
+    if (isAssistant) {
+      actionButtons.push(
+        h(
+          'button',
+          {
+            class: 'message-action',
+            type: 'button',
+            title: '复制这段回复',
+            'aria-label': '复制这段回复',
+            onclick: async () => {
+              const ok = await copyText(message.content);
+              toast(ok ? '已复制。' : '复制失败，请手动选择文本。', {
+                type: ok ? 'success' : 'error',
+                duration: 1_800,
+              });
+            },
           },
-        },
-        icon('copy'),
-      ),
-    );
+          icon('copy'),
+        ),
+      );
+    }
+    if (!isPending) {
+      actionButtons.push(
+        h(
+          'button',
+          {
+            class: 'message-action message-delete-action',
+            type: 'button',
+            title: '删除这条对话',
+            'aria-label': '删除这条对话',
+            onclick: () => openDeleteMessageDialog(message),
+          },
+          icon('trash'),
+        ),
+      );
+    }
+    const actions = h('div', { class: 'message-actions' }, ...actionButtons);
 
     if (isPending) {
       contentBox.appendChild(
@@ -1130,13 +1147,173 @@ export async function render(root, app) {
           'div',
           { class: 'message-head' },
           meta,
-          isAssistant ? actions : null,
+          actions,
         ),
         bubble,
       ),
     );
 
     return { wrapper, bubble, contentBox, meta, time: meta.querySelector('.message-time') };
+  }
+
+  function deleteMessages(start, requestedCount) {
+    const archive = getArchive();
+    if (!archive || start < 0 || start >= archive.messages.length) return false;
+    const summarizedUntil = archive.summarizedUntil || 0;
+    if (start < summarizedUntil) {
+      toast('这条消息已经进入日记记忆，不能单独删除。', { type: 'warn' });
+      return false;
+    }
+    const available = archive.messages.length - start;
+    const count =
+      requestedCount === Infinity
+        ? available
+        : Math.max(1, Math.min(Number(requestedCount) || 1, available));
+    const removed = archive.messages.slice(start, start + count);
+    if (!removed.length) return false;
+    const removedIds = new Set(removed.map((message) => message.id));
+    const now = new Date().toISOString();
+
+    store.update(
+      (state) => {
+        const target = state.archives.find((item) => item.id === archive.id);
+        if (!target) return;
+        target.messages.splice(start, count);
+        target.updatedAt = now;
+      },
+      { reason: 'messages-deleted', archiveId: archive.id },
+    );
+
+    for (const node of messagesWrap.querySelectorAll('.message[data-message-id]')) {
+      if (removedIds.has(node.dataset.messageId)) node.remove();
+    }
+
+    const next = getArchive();
+    const scrollTop = chatScroll.scrollTop;
+    if (!next?.messages.length) {
+      starterStrip.hidden = false;
+    }
+    refreshHeaderMeta();
+    refreshMemory();
+    updateComposerHint();
+    updateComposerState();
+    requestAnimationFrame(() => {
+      if (isNearBottom(chatScroll)) chatScroll.scrollTop = chatScroll.scrollHeight;
+      else chatScroll.scrollTop = Math.min(scrollTop, chatScroll.scrollHeight);
+    });
+
+    store.info(
+      'messages.deleted',
+      count > 1
+        ? `删除了 ${count} 条对话记录。`
+        : '删除了一条对话记录。',
+      {
+        archiveId: archive.id,
+        detail: {
+          start,
+          count,
+          roles: removed.map((message) => message.role),
+        },
+      },
+    );
+    toast(count > 1 ? `已删除 ${count} 条对话。` : '已删除这条对话。', {
+      type: 'success',
+      duration: 2_000,
+    });
+    return true;
+  }
+
+  function openDeleteMessageDialog(message) {
+    const archive = getArchive();
+    if (!archive) return null;
+    if (streaming) {
+      toast('请等这一轮生成结束，再删除对话。', { type: 'info' });
+      return null;
+    }
+    const index = archive.messages.findIndex((item) => item.id === message.id);
+    if (index < 0) return null;
+    const summarizedUntil = archive.summarizedUntil || 0;
+    if (index < summarizedUntil) {
+      return openModal({
+        title: '这条消息已进入记忆',
+        eyebrow: archive.name,
+        size: 'sm',
+        body: h(
+          'div',
+          { class: 'message-delete-dialog' },
+          h('p', { text: '这条消息已经被折叠进章节日记。单独删除会让日记与对话顺序不一致。' }),
+          h('p', { class: 'muted small', text: '可以删除当前章节日记之后、尚未折叠的消息。' }),
+        ),
+        actions: [{ label: '知道了', variant: 'primary' }],
+      });
+    }
+
+    const isUser = message.role === 'user';
+    const nextMessage = archive.messages[index + 1];
+    const previousMessage = archive.messages[index - 1];
+    const deleteTurn = isUser
+      ? nextMessage?.role === 'assistant'
+      : previousMessage?.role === 'user';
+    const turnStart = deleteTurn && !isUser ? index - 1 : index;
+    if (deleteTurn && turnStart < summarizedUntil) {
+      return openModal({
+        title: '这条回复依附于已折叠消息',
+        eyebrow: archive.name,
+        size: 'sm',
+        body: h(
+          'div',
+          { class: 'message-delete-dialog' },
+          h('p', { text: '它的上一条玩家消息已经进入章节日记，不能单独删除这一轮。' }),
+          h('p', { class: 'muted small', text: '可以删除当前章节中尚未折叠的对话。' }),
+        ),
+        actions: [{ label: '知道了', variant: 'primary' }],
+      });
+    }
+    const preview = truncateText(
+      String(message.content || '').replace(/\s+/g, ' ').trim(),
+      160,
+    );
+    const body = h(
+      'div',
+      { class: 'message-delete-dialog' },
+      h(
+        'div',
+        { class: 'message-delete-preview' },
+        h('strong', { text: isUser ? '你的消息' : getPersona().name }),
+        h('p', { text: preview || '（空消息）' }),
+      ),
+      h('p', {
+        text: deleteTurn
+          ? isUser
+            ? '会同时删除这条消息和紧随其后的角色回复，避免留下孤立的回复。'
+            : '会同时删除你上一条消息和这条角色回复，避免留下没有提问的回复。'
+          : '只会删除这一条消息。',
+      }),
+      h('p', {
+        class: 'muted small',
+        text: '删除无法撤回；右侧状态栏不会自动回退，如需要请手动校正。',
+      }),
+    );
+
+    return openModal({
+      title: '删除这条对话？',
+      eyebrow: archive.name,
+      size: 'sm',
+      body,
+      actions: [
+        { label: '取消', variant: 'ghost' },
+        {
+          label: deleteTurn ? '删除这一轮' : '只删这条',
+          variant: 'danger',
+          onClick: () => deleteMessages(deleteTurn ? turnStart : index, deleteTurn ? 2 : 1),
+        },
+        {
+          label: '删除此条及之后',
+          variant: 'danger',
+          onClick: () => deleteMessages(index, Infinity),
+        },
+      ],
+    });
   }
 
   function appendMessage(message, options = {}) {
