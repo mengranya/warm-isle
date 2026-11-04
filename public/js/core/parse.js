@@ -39,6 +39,15 @@ function pickStatusValue(source, keys) {
 
 export function normalizeStatusPatch(input) {
   if (!input || typeof input !== 'object') return null;
+  const nested =
+    input.status && typeof input.status === 'object'
+      ? input.status
+      : input.state && typeof input.state === 'object'
+        ? input.state
+        : input['角色状态'] && typeof input['角色状态'] === 'object'
+          ? input['角色状态']
+          : null;
+  if (nested) input = nested;
   const patch = {
     health: cleanStatusValue(
       pickStatusValue(input, ['health', '身体状况', '身体', '健康']),
@@ -80,7 +89,7 @@ function parseLabeledStatus(raw) {
   for (const [key, labels] of Object.entries(fields)) {
     for (const label of labels) {
       const regex = new RegExp(
-        `(?:^|[\\n,，;；])\\s*["“']?${label}["”']?\\s*[:：]\\s*["“']?([^"\\n,，;；}]+)`,
+        `(?:^|[\\n,，;；、|])\\s*(?:[-*•]\\s*)?\\*{0,2}["“']?${label}(?:\\s*[（(][^）)]*[）)])?["”']?\\*{0,2}\\s*[:：]\\s*["“']?([^"\\n,，;；}]+)`,
         'i',
       );
       const match = raw.match(regex);
@@ -93,10 +102,57 @@ function parseLabeledStatus(raw) {
   return normalizeStatusPatch(result);
 }
 
+function parseStatusCandidate(raw) {
+  if (!raw) return null;
+  const text = String(raw)
+    .replace(/^\s*```(?:json)?\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
+    .trim();
+  const parsed = parseLooseJson(text);
+  if (parsed && typeof parsed === 'object') {
+    const status = normalizeStatusPatch(parsed);
+    if (status) return status;
+  }
+  return parseLabeledStatus(text.replace(/\*\*/g, ''));
+}
+
+function statusFieldCount(status) {
+  return ['health', 'outfit', 'environment', 'action', 'notes'].filter(
+    (key) => status?.[key],
+  ).length;
+}
+
+/**
+ * 插件只写了 health/outfit 等字段名时，模型可能不使用 <status> 标签。
+ * 只在末尾识别至少两个字段，避免把正文里的普通描述误删。
+ */
+function extractLooseStatus(content) {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```\s*$/i);
+  if (fenced?.index !== undefined) {
+    const status = parseStatusCandidate(fenced[1]);
+    if (statusFieldCount(status) >= 2) {
+      return { status, index: fenced.index };
+    }
+  }
+
+  const labeledStart = content.search(
+    /(?:^|\n)\s*(?:[-*•]\s*)?\*{0,2}(?:health|身体状况|健康|outfit|当前衣着|衣着|environment|所处环境|环境|action|正在进行的动作|动作)(?:\s*[（(][^）)]*[）)])?\*{0,2}\s*[:：]/i,
+  );
+  if (labeledStart >= 0) {
+    const status = parseStatusCandidate(content.slice(labeledStart));
+    if (statusFieldCount(status) >= 2) {
+      return { status, index: labeledStart };
+    }
+  }
+
+  return null;
+}
+
 function extractStatus(raw) {
   if (!raw) return { content: '', status: null, hadStatusBlock: false };
 
-  let content = String(raw);
+  const original = String(raw);
+  let content = original;
   let statusRaw = null;
   let hadStatusBlock = false;
 
@@ -125,8 +181,17 @@ function extractStatus(raw) {
   // 没有控制块时，不要误删正文。
   let status = null;
   if (statusRaw) {
-    const parsed = parseLooseJson(statusRaw);
-    status = normalizeStatusPatch(parsed) || parseLabeledStatus(statusRaw);
+    status = parseStatusCandidate(statusRaw);
+  }
+
+  // 兼容插件只要求字段名、模型却漏掉 <status> 标签的情况。
+  if (!status) {
+    const loose = extractLooseStatus(original);
+    if (loose?.status) {
+      status = loose.status;
+      content = original.slice(0, loose.index);
+      hadStatusBlock = true;
+    }
   }
 
   content = content
