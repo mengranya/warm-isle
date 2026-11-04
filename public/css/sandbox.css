@@ -1809,7 +1809,8 @@ button.sandbox-quick-link {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 20px 24px 8px;
-  scroll-behavior: smooth;
+  /* 流式推演逐帧校正滚动位置，禁用平滑滚动避免与输入争抢主线程。 */
+  scroll-behavior: auto;
   scrollbar-gutter: stable;
 }
 
@@ -1818,6 +1819,8 @@ button.sandbox-quick-link {
   margin: 0 0 18px auto;
   padding: 10px 13px;
   border: 1px solid rgba(213, 190, 164, 0.7);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
   border-radius: 15px 4px 15px 15px;
   background: linear-gradient(145deg, #f8ecdc, #f4e4d2);
   box-shadow: 0 7px 18px -16px rgba(94, 61, 40, 0.5);
@@ -1854,6 +1857,8 @@ button.sandbox-quick-link {
 .sandbox-narrative-message {
   max-width: 94%;
   margin: 0 0 22px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;
 }
 
 .sandbox-narrative-label {

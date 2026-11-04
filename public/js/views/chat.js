@@ -1871,10 +1871,29 @@ export async function render(root, app) {
     }
   }
 
+  let composerGrowFrame = 0;
+  let composerComposing = false;
+  const queueComposerGrow = () => {
+    if (composerGrowFrame) return;
+    composerGrowFrame = requestAnimationFrame(() => {
+      composerGrowFrame = 0;
+      autoGrow(textarea);
+    });
+  };
+
+  textarea.addEventListener('compositionstart', () => {
+    composerComposing = true;
+  });
+  textarea.addEventListener('compositionend', () => {
+    composerComposing = false;
+    queueComposerGrow();
+  });
+
   textarea.addEventListener('input', () => {
-    autoGrow(textarea);
+    // 输入联想/中文候选阶段不强制测量高度，避免每个 composition 事件触发整页重排。
     charCounter.textContent = String(countChars(textarea.value));
     updateComposerState();
+    if (!composerComposing) queueComposerGrow();
   });
 
   textarea.addEventListener('keydown', (event) => {
@@ -1970,6 +1989,7 @@ export async function render(root, app) {
     cleanup() {
       if (abortController) abortController.abort();
       if (paintFrame) cancelAnimationFrame(paintFrame);
+      if (composerGrowFrame) cancelAnimationFrame(composerGrowFrame);
       document.removeEventListener('keydown', handleStatusEscape);
       document.removeEventListener('pointerdown', handleOutsideStoryMenu);
       document.body.classList.remove('status-open');

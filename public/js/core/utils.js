@@ -362,7 +362,10 @@ export function formatBytes(bytes) {
 }
 
 export function countChars(text) {
-  return Array.from(String(text ?? '')).length;
+  const value = String(text ?? '');
+  // 中文等 BMP 字符不需要展开成码点数组；只有遇到代理对时才走慢路径。
+  if (!/[\uD800-\uDFFF]/.test(value)) return value.length;
+  return Array.from(value).length;
 }
 
 export function sleep(ms) {

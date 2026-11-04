@@ -140,7 +140,14 @@ export async function render(root, app) {
     icon('stop'),
     h('span', { text: '停止' }),
   );
-  const composerHint = h('div', { class: 'sandbox-composer-hint' });
+  const composerHintText = h('span');
+  const composerTokenText = h('span', { class: 'sandbox-composer-tokens' });
+  const composerHint = h(
+    'div',
+    { class: 'sandbox-composer-hint' },
+    composerHintText,
+    composerTokenText,
+  );
 
   const form = h(
     'form',
@@ -231,9 +238,25 @@ export async function render(root, app) {
   );
 
   root.appendChild(page);
+  let composerGrowFrame = 0;
+  let composerComposing = false;
+  const queueComposerGrow = () => {
+    if (composerGrowFrame) return;
+    composerGrowFrame = requestAnimationFrame(() => {
+      composerGrowFrame = 0;
+      autoGrow(textarea, 150);
+    });
+  };
+  textarea.addEventListener('compositionstart', () => {
+    composerComposing = true;
+  });
+  textarea.addEventListener('compositionend', () => {
+    composerComposing = false;
+    queueComposerGrow();
+  });
   textarea.addEventListener('input', () => {
-    autoGrow(textarea, 150);
     updateComposer();
+    if (!composerComposing) queueComposerGrow();
   });
   textarea.addEventListener('keydown', (event) => {
     if (
@@ -932,14 +955,16 @@ export async function render(root, app) {
     sendButton.disabled = streaming || empty || defeated;
     stopButton.hidden = !streaming;
     textarea.disabled = streaming || defeated;
-    composerHint.replaceChildren(
-      h('span', { text: streaming ? '世界正在推演，本轮结束后才能继续行动。' : 'Enter 执行 · Shift+Enter 换行 · 自由输入任何行动' }),
-      h(
-        'span',
-        { class: 'sandbox-composer-tokens' },
-        streaming ? '生成中…' : `${countChars(textarea.value)} / ${SANDBOX_LIMITS.maxActionChars}`,
-      ),
-    );
+    const nextHint = streaming
+      ? '世界正在推演，本轮结束后才能继续行动。'
+      : 'Enter 执行 · Shift+Enter 换行 · 自由输入任何行动';
+    if (composerHintText.textContent !== nextHint) composerHintText.textContent = nextHint;
+    const nextTokens = streaming
+      ? '生成中…'
+      : `${countChars(textarea.value)} / ${SANDBOX_LIMITS.maxActionChars}`;
+    if (composerTokenText.textContent !== nextTokens) {
+      composerTokenText.textContent = nextTokens;
+    }
     form.classList.toggle('is-streaming', streaming);
     sendButton.classList.toggle('is-stop', streaming);
   }
@@ -1785,6 +1810,7 @@ export async function render(root, app) {
     cleanup() {
       abortController?.abort();
       abortController = null;
+      if (composerGrowFrame) cancelAnimationFrame(composerGrowFrame);
       pendingElement = null;
       pendingContent = null;
     },

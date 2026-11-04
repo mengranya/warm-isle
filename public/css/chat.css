@@ -292,7 +292,8 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 11px 23px 4px;
-  scroll-behavior: smooth;
+  /* 流式输出会逐帧校正 scrollTop；这里保持即时滚动，避免平滑滚动排队拖慢输入。 */
+  scroll-behavior: auto;
 }
 
 .messages {
@@ -356,6 +357,9 @@
   gap: 9px;
   padding: 8px 0;
   animation-fill-mode: both;
+  /* 超长对话只布局可视区域，避免每次输入强制重排全部历史消息。 */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }
 
 .message-assistant {

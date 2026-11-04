@@ -27,21 +27,45 @@
 
   const root = document.documentElement;
   const coarse = window.matchMedia?.('(pointer: coarse)');
-  let lastVisualHeight = window.visualViewport?.height || window.innerHeight;
+  let lastVisualHeight = Math.round(
+    window.visualViewport?.height || window.innerHeight,
+  );
+  let lastKeyboardOpen = false;
+  let lastIsMobile = false;
+  let viewportFrame = 0;
 
-  function syncViewport() {
+  function applyViewport() {
     const viewport = window.visualViewport;
     const height = Math.round(viewport?.height || window.innerHeight);
-    lastVisualHeight = height;
-    root.style.setProperty('--app-height', `${height}px`);
-    root.classList.toggle('is-mobile', Boolean(coarse?.matches));
-    const keyboardOpen = Boolean(
-      coarse?.matches && window.innerHeight - height > 140,
-    );
-    root.classList.toggle('keyboard-open', keyboardOpen);
-    document.body.classList.toggle('keyboard-open', keyboardOpen);
+    const isMobile = Boolean(coarse?.matches);
+    const keyboardOpen = Boolean(isMobile && window.innerHeight - height > 140);
+
+    // 只在真正变化时写 CSS 变量和 class，避免移动端键盘/滚动事件
+    // 每帧触发整页样式重算。
+    if (height !== lastVisualHeight) {
+      lastVisualHeight = height;
+      root.style.setProperty('--app-height', `${height}px`);
+    }
+    if (isMobile !== lastIsMobile) {
+      lastIsMobile = isMobile;
+      root.classList.toggle('is-mobile', isMobile);
+    }
+    if (keyboardOpen !== lastKeyboardOpen) {
+      lastKeyboardOpen = keyboardOpen;
+      root.classList.toggle('keyboard-open', keyboardOpen);
+      document.body.classList.toggle('keyboard-open', keyboardOpen);
+    }
   }
 
+  function syncViewport() {
+    if (viewportFrame) return;
+    viewportFrame = requestAnimationFrame(() => {
+      viewportFrame = 0;
+      applyViewport();
+    });
+  }
+
+  root.style.setProperty('--app-height', `${lastVisualHeight}px`);
   syncViewport();
   window.addEventListener('resize', syncViewport, { passive: true });
   window.addEventListener('orientationchange', () => {
