@@ -54,6 +54,17 @@ import {
 import { confirmDialog } from '../ui/modal.js';
 import { toast, toastError } from '../ui/toast.js';
 
+function combineUsage(left, right) {
+  if (!left) return right || null;
+  if (!right) return left;
+  return {
+    promptTokens: (left.promptTokens || 0) + (right.promptTokens || 0),
+    completionTokens: (left.completionTokens || 0) + (right.completionTokens || 0),
+    totalTokens: (left.totalTokens || 0) + (right.totalTokens || 0),
+    estimated: Boolean(left.estimated || right.estimated),
+  };
+}
+
 const STATUS_KEYS = STATUS_FIELDS.map((field) => field.key);
 
 function fakeAbortError() {
@@ -1168,7 +1179,15 @@ export async function render(root, app) {
     const visible = getStreamingVisibleText(rawStream);
     pending.contentBox.replaceChildren();
     if (visible) {
-      pending.contentBox.appendChild(richText(visible));
+      if (visible.length > 1_200) {
+        // 长文本流式阶段用纯文本更新，避免每帧解析整段富文本造成卡顿；
+        // 生成完成后 commitAssistant 会恢复完整富文本格式。
+        const plain = h('div', { class: 'rich-text stream-plain-text' });
+        plain.textContent = visible;
+        pending.contentBox.appendChild(plain);
+      } else {
+        pending.contentBox.appendChild(richText(visible));
+      }
     } else {
       pending.contentBox.appendChild(
         h('span', { class: 'typing-dots' }, h('i'), h('i'), h('i')),
@@ -1439,6 +1458,7 @@ export async function render(root, app) {
     let usage = null;
     let demoStatus = null;
     let resultText = '';
+    let finishReason = '';
 
     try {
       if (settingsSnapshot.demoMode) {
@@ -1451,6 +1471,7 @@ export async function render(root, app) {
         resultModel = 'demo';
         resultProvider = 'demo';
         resultText = demo.content;
+        finishReason = 'stop';
         const chars = Array.from(demo.content);
         const chunkSize = 3;
         for (let index = 0; index < chars.length; index += chunkSize) {
@@ -1482,6 +1503,7 @@ export async function render(root, app) {
         resultProvider = providerId;
         requestId = result.requestId || '';
         resultText = result.text;
+        finishReason = result.finishReason || '';
         usage = normalizeUsage(result.usage, promptText, resultText);
         schedulePaint();
         app.markAIStatus('online');
@@ -1501,8 +1523,87 @@ export async function render(root, app) {
         resultProvider = providerId;
         requestId = result.requestId || '';
         resultText = result.text;
+        finishReason = result.finishReason || '';
         usage = normalizeUsage(result.usage, promptText, resultText);
         app.markAIStatus('online');
+      }
+
+      // 达到模型输出上限时自动用更大的上限重发一次，避免长文在句中断开。
+      if (
+        !settingsSnapshot.demoMode &&
+        (finishReason === 'length' || finishReason === 'max_tokens') &&
+        requestSettings.maxTokens < 8_192
+      ) {
+        const previousRaw = rawStream;
+        const firstUsage = usage;
+        requestSettings.maxTokens = 8_192;
+        rawStream = '';
+        updateComposerHint?.();
+        toast('内容达到输出上限，正在自动提高上限补全本轮。', {
+          type: 'info',
+          duration: 4_000,
+        });
+        try {
+          if (settingsSnapshot.stream === false) {
+            const retried = await completeChat({
+              settings: requestSettings,
+              messages: prompt.messages,
+              apiKey: app.getEffectiveApiKey(providerId),
+              signal: abortController.signal,
+              useCache: false,
+            });
+            rawStream = retried.text;
+            resultModel = retried.model || resultModel;
+            requestId = retried.requestId || requestId;
+            resultText = retried.text;
+            finishReason = retried.finishReason || '';
+            usage = combineUsage(
+              firstUsage,
+              normalizeUsage(retried.usage, promptText, retried.text),
+            );
+          } else {
+            const retried = await streamChat({
+              settings: requestSettings,
+              messages: prompt.messages,
+              apiKey: app.getEffectiveApiKey(providerId),
+              signal: abortController.signal,
+              onDelta: (_delta, fullText) => {
+                rawStream = fullText;
+                schedulePaint();
+              },
+            });
+            rawStream = retried.text;
+            resultModel = retried.model || resultModel;
+            requestId = retried.requestId || requestId;
+            resultText = retried.text;
+            finishReason = retried.finishReason || '';
+            usage = combineUsage(
+              firstUsage,
+              normalizeUsage(retried.usage, promptText, retried.text),
+            );
+          }
+          app.store.info('ai.continued', '输出达到上限后自动提高上限并补全。', {
+            archiveId: current.id,
+            detail: { maxTokens: 8_192, finishReason },
+          });
+        } catch (retryError) {
+          rawStream = previousRaw;
+          usage = firstUsage;
+          app.store.warn('ai.continue.failed', '自动补全失败，保留第一次生成内容。', {
+            archiveId: current.id,
+            detail: { message: retryError?.message || '' },
+          });
+        }
+      }
+
+      if (
+        !settingsSnapshot.demoMode &&
+        (finishReason === 'length' || finishReason === 'max_tokens')
+      ) {
+        toast('已达到模型最大输出上限，正文可能仍未写完；请让对方继续或分段生成。', {
+          type: 'warn',
+          duration: 6_000,
+        });
       }
 
       const parsed = extractAssistantPayload(rawStream);

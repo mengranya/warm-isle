@@ -239,6 +239,12 @@ export function richText(text, { className = '' } = {}) {
   const root = h('div', { class: `rich-text ${className}`.trim() });
   const source = String(text ?? '').replace(/\r\n/g, '\n').trim();
   if (!source) return root;
+  if (source.length > 20_000) {
+    // 超长百科/导出正文避免一次创建大量行内节点导致主线程卡住。
+    root.classList.add('stream-plain-text');
+    root.textContent = source;
+    return root;
+  }
 
   const blocks = source.split(/\n{2,}/);
   for (const block of blocks) {

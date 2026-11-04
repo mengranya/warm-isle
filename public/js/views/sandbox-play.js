@@ -73,6 +73,17 @@ import { openModal } from '../ui/modal.js';
 import { completeChat, streamChat } from '../services/ai.js';
 import { toast, toastError } from '../ui/toast.js';
 
+function combineUsage(left, right) {
+  if (!left) return right || null;
+  if (!right) return left;
+  return {
+    promptTokens: (left.promptTokens || 0) + (right.promptTokens || 0),
+    completionTokens: (left.completionTokens || 0) + (right.completionTokens || 0),
+    totalTokens: (left.totalTokens || 0) + (right.totalTokens || 0),
+    estimated: Boolean(left.estimated || right.estimated),
+  };
+}
+
 export async function render(root, app) {
   const { store } = app;
   const initial = store.getActiveSandboxSave();
@@ -436,7 +447,15 @@ export async function render(root, app) {
 
   function paintPending(text) {
     if (!pendingContent) return;
-    pendingContent.replaceChildren(richText(text || ''));
+    pendingContent.replaceChildren();
+    if (text && text.length > 1_200) {
+      // 长文本流式阶段避免每帧解析整段富文本，生成结束后再恢复格式。
+      const plain = h('div', { class: 'rich-text stream-plain-text' });
+      plain.textContent = text;
+      pendingContent.appendChild(plain);
+    } else if (text) {
+      pendingContent.appendChild(richText(text));
+    }
     if (!text) {
       pendingContent.appendChild(
         h('span', { class: 'sandbox-typing' }, h('span'), h('span'), h('span')),
@@ -1257,6 +1276,7 @@ export async function render(root, app) {
     let resultProvider = providerId;
     let requestId = '';
     let usage = null;
+    let finishReason = '';
     const startedAt = performance.now();
 
     try {
@@ -1270,6 +1290,7 @@ export async function render(root, app) {
         resultText = demo.raw;
         resultModel = 'demo';
         resultProvider = 'demo';
+        finishReason = 'stop';
         usage = demo.usage;
         rawStream = resultText;
         paintPending(getSandboxStreamingVisibleText(rawStream));
@@ -1285,6 +1306,7 @@ export async function render(root, app) {
         resultText = result.text;
         resultModel = result.model || settingsSnapshot.model;
         requestId = result.requestId || '';
+        finishReason = result.finishReason || '';
         usage = normalizeUsage(result.usage, promptText, resultText);
         rawStream = resultText;
         paintPending(getSandboxStreamingVisibleText(rawStream));
@@ -1303,9 +1325,90 @@ export async function render(root, app) {
         resultText = result.text;
         resultModel = result.model || settingsSnapshot.model;
         requestId = result.requestId || '';
+        finishReason = result.finishReason || '';
         usage = normalizeUsage(result.usage, promptText, resultText);
         rawStream = resultText;
         app.markAIStatus('online');
+      }
+
+      // 结构化长回复被上限截断时，自动扩大到硬上限重发一次。
+      if (
+        !settingsSnapshot.demoMode &&
+        (finishReason === 'length' || finishReason === 'max_tokens') &&
+        requestSettings.maxTokens < SANDBOX_LIMITS.hardMaxTokens
+      ) {
+        const previousRaw = rawStream;
+        const firstUsage = usage;
+        requestSettings.maxTokens = SANDBOX_LIMITS.hardMaxTokens;
+        rawStream = '';
+        paintPending('');
+        toast('沙盒叙事达到输出上限，正在自动提高上限补全本轮。', {
+          type: 'info',
+          duration: 4_000,
+        });
+        try {
+          if (settingsSnapshot.stream === false) {
+            const retried = await completeChat({
+              settings: requestSettings,
+              messages: prompt.messages,
+              apiKey: app.getEffectiveApiKey(providerId),
+              signal: abortController.signal,
+              useCache: false,
+            });
+            resultText = retried.text;
+            resultModel = retried.model || resultModel;
+            requestId = retried.requestId || requestId;
+            finishReason = retried.finishReason || '';
+            usage = combineUsage(
+              firstUsage,
+              normalizeUsage(retried.usage, promptText, retried.text),
+            );
+          } else {
+            const retried = await streamChat({
+              settings: requestSettings,
+              messages: prompt.messages,
+              apiKey: app.getEffectiveApiKey(providerId),
+              signal: abortController.signal,
+              onDelta: (_delta, fullText) => {
+                rawStream = fullText;
+                paintPending(getSandboxStreamingVisibleText(rawStream));
+              },
+            });
+            resultText = retried.text;
+            resultModel = retried.model || resultModel;
+            requestId = retried.requestId || requestId;
+            finishReason = retried.finishReason || '';
+            usage = combineUsage(
+              firstUsage,
+              normalizeUsage(retried.usage, promptText, retried.text),
+            );
+          }
+          rawStream = resultText;
+          paintPending(getSandboxStreamingVisibleText(rawStream));
+          store.info('sandbox.continued', '沙盒输出达到上限后自动提高上限并补全。', {
+            archiveId: current.id,
+            detail: { maxTokens: SANDBOX_LIMITS.hardMaxTokens, finishReason },
+          });
+        } catch (retryError) {
+          rawStream = previousRaw;
+          resultText = previousRaw;
+          usage = firstUsage;
+          paintPending(getSandboxStreamingVisibleText(rawStream));
+          store.warn('sandbox.continue.failed', '自动补全失败，保留第一次生成内容。', {
+            archiveId: current.id,
+            detail: { message: retryError?.message || '' },
+          });
+        }
+      }
+
+      if (
+        !settingsSnapshot.demoMode &&
+        (finishReason === 'length' || finishReason === 'max_tokens')
+      ) {
+        toast('沙盒叙事达到模型最大输出上限，可能仍未写完；请继续行动或分段推进。', {
+          type: 'warn',
+          duration: 6_000,
+        });
       }
 
       const parsed = extractSandboxPayload(resultText);

@@ -153,6 +153,7 @@ export async function streamChat({ settings, messages, apiKey, signal, onMeta, o
   let usage = null;
   let model = settings.model;
   let finished = false;
+  let finishReason = '';
   let streamError = null;
 
   const consumeFrame = (frame) => {
@@ -188,6 +189,7 @@ export async function streamChat({ settings, messages, apiKey, signal, onMeta, o
     if (event === 'done') {
       usage = parseUsage(parsed.usage);
       model = parsed.model || model;
+      finishReason = parsed.finishReason || '';
       finished = true;
       return;
     }
@@ -243,7 +245,7 @@ export async function streamChat({ settings, messages, apiKey, signal, onMeta, o
     });
   }
 
-  return { text: content, usage, model, requestId, finished };
+  return { text: content, usage, model, requestId, finished, finishReason };
 }
 
 /** 非流式请求，用于生成日记、NPC 等短任务。 */
@@ -311,6 +313,35 @@ export async function completeChat({
       type: 'ParseError',
     });
   }
+  // 非流式短任务也可能因为 max_tokens 过小在句中断开；自动用硬上限补一次。
+  const finishReason = body?.finishReason || '';
+  if (
+    !signal?.aborted &&
+    (finishReason === 'length' || finishReason === 'max_tokens') &&
+    Number(payload.maxTokens) < 8_192
+  ) {
+    try {
+      const retryPayload = buildPayload({
+        settings: { ...settings, maxTokens: 8_192 },
+        messages,
+        stream: false,
+        apiKey,
+      });
+      const retryResponse = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(retryPayload),
+        signal,
+      });
+      if (retryResponse.ok) {
+        const retried = await retryResponse.json();
+        if (retried?.text?.trim()) body = retried;
+      }
+    } catch {
+      // 保留第一次的完整前缀，不因为补全失败而丢掉已有内容。
+    }
+  }
+
   if (!body?.text?.trim()) {
     throw new AIError('模型没有返回任何文本。', {
       code: 'EMPTY_RESPONSE',
@@ -324,6 +355,7 @@ export async function completeChat({
     usage: parseUsage(body.usage),
     model: body.model || settings.model,
     provider: body.provider || settings.provider,
+    finishReason: body.finishReason || '',
     requestId: body.requestId || '',
     cached: false,
   };

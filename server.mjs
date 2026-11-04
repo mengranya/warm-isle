@@ -482,13 +482,19 @@ async function completeUpstream(provider, response) {
           .map((block) => block.text || '')
           .join('')
       : '';
-    return { text, usage: normalizeUsage(payload.usage), model: payload.model || provider.model };
+    return {
+      text,
+      usage: normalizeUsage(payload.usage),
+      model: payload.model || provider.model,
+      finishReason: payload.stop_reason || '',
+    };
   }
 
   return {
     text: await extractOpenAiText(payload),
     usage: normalizeUsage(payload.usage),
     model: payload.model || provider.model,
+    finishReason: payload.choices?.[0]?.finish_reason || '',
   };
 }
 
@@ -533,6 +539,7 @@ async function proxyStream(provider, response, res, requestId) {
   let usage = null;
   let receivedText = false;
   let streamDone = false;
+  let finishReason = '';
 
   const handleEventData = (data) => {
     if (!data || data === '[DONE]') {
@@ -562,7 +569,10 @@ async function proxyStream(provider, response, res, requestId) {
           output_tokens: event.usage?.output_tokens,
         });
         if (normalized) usage = normalized;
-        if (event.delta?.stop_reason) streamDone = true;
+        if (event.delta?.stop_reason) {
+          finishReason = event.delta.stop_reason;
+          streamDone = true;
+        }
       } else if (event.type === 'message_stop') {
         streamDone = true;
       } else if (event.type === 'error') {
@@ -589,7 +599,10 @@ async function proxyStream(provider, response, res, requestId) {
       sseWrite(res, 'delta', { text });
     }
     if (event.usage) usage = normalizeUsage(event.usage) || usage;
-    if (event?.choices?.[0]?.finish_reason) streamDone = true;
+    if (event?.choices?.[0]?.finish_reason) {
+      finishReason = event.choices[0].finish_reason;
+      streamDone = true;
+    }
   };
 
   try {
@@ -619,6 +632,7 @@ async function proxyStream(provider, response, res, requestId) {
         usage,
         model: provider.model,
         finished: streamDone,
+        finishReason,
       });
     }
   } catch (error) {
@@ -678,6 +692,7 @@ async function handleChat(req, res) {
           usage: result.usage,
           model: result.model,
           provider: provider.providerId,
+          finishReason: result.finishReason || '',
           requestId,
         },
         requestId,

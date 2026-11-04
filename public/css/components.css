@@ -1183,6 +1183,12 @@ dialog.modal::backdrop {
 
 /* ------------------------------- 富文本 ------------------------------- */
 
+.stream-plain-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .rich-text {
   font-size: 14.5px;
   line-height: 1.95;
