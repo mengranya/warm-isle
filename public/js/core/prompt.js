@@ -9,6 +9,11 @@
 
 import { APP_NAME } from './constants.js';
 import {
+  FULL_MEMORY_MAX_CHARS,
+  getMemoryStrengthMeta,
+  normalizeMemoryStrength,
+} from './memory-strength.js';
+import {
   compilePluginRuntime,
   formatPluginEnforcement,
   formatPluginInstructionBlock,
@@ -330,18 +335,51 @@ function formatTranscript(messages, { maxChars = 9_000 } = {}) {
 }
 
 /**
- * 生成 100–200 字的高度概括日记。一次结束章节只调用一次，成本很低。
+ * 100% 记忆强度使用：不压缩、不截断单条消息，保留本章完整对话。
+ * 只受数据层 50,000 字上限保护。
  */
-export function buildDiaryPrompt({ archive, persona, onlyUnsummarized = true }) {
+export function buildFullDiaryTranscript(
+  archive,
+  {
+    start = Math.max(0, archive?.summarizedUntil || 0),
+    maxChars = FULL_MEMORY_MAX_CHARS,
+  } = {},
+) {
+  const segment = (archive?.messages || []).slice(start);
+  const lines = segment
+    .filter((message) => ['user', 'assistant'].includes(message?.role) && message.content)
+    .map((message) => {
+      const speaker = message.role === 'user' ? '玩家' : '角色';
+      return `${speaker}：${String(message.content).trim()}`;
+    });
+  return truncateText(lines.join('\n'), maxChars);
+}
+
+/**
+ * 按记忆强度生成日记压缩提示词。
+ * 0% 不调用；100% 由调用方直接保存完整对话。
+ */
+export function buildDiaryPrompt({
+  archive,
+  persona,
+  onlyUnsummarized = true,
+  memoryStrength = 40,
+}) {
   if (!archive || !persona) throw new Error('生成日记缺少存档或人格。');
+  const strength = normalizeMemoryStrength(memoryStrength, 40);
+  const meta = getMemoryStrengthMeta(strength);
+  const targetMin = meta.min === 100 ? 0 : meta.min === 0 ? 0 : meta.target.match(/\d+/)?.[0] || 100;
+  const targetMax = meta.min === 100 ? 0 : meta.max === 0 ? 0 : meta.target.match(/(\d+)\s*字$/)?.[1] || 200;
   const start = onlyUnsummarized ? Math.max(0, archive.summarizedUntil || 0) : 0;
   const segment = (archive.messages || []).slice(start);
   const transcript = formatTranscript(segment, { maxChars: 9_000 });
   const today = new Date().toLocaleDateString('zh-CN');
+  const targetText = `${targetMin}–${targetMax} 个中文字符`;
 
   const system = [
     '你是暖屿的记忆档案员。',
-    '把一段角色扮演对话压缩成 100–200 个中文字符的日记，供后续角色回忆。',
+    `把一段角色扮演对话压缩成 ${targetText}的日记，供后续角色回忆。`,
+    `记忆强度：${strength}%（${meta.label}）。${meta.description}`,
     '要求：第三人称；使用角色与玩家的姓名；写清关键事件、情绪变化、做出的承诺、未解的线索与关系进展；省略寒暄和重复内容。',
     '不要编造对话中不存在的事实，不要写分析或建议，不要使用标题、引号、Markdown、JSON。',
     '只输出一段日记正文。',
@@ -352,11 +390,12 @@ export function buildDiaryPrompt({ archive, persona, onlyUnsummarized = true }) 
     `角色：${persona.name}（${persona.identity || '身份未知'}）`,
     `玩家：${archive.protagonist?.name || '玩家'}`,
     `当前场景：${archive.status?.environment || '未知'}；${archive.status?.action || ''}`,
+    `目标记忆程度：${strength}% · ${meta.label} · ${meta.target}`,
     '',
     '【待压缩对话】',
     transcript || '（这段章节没有可压缩的对话。）',
     '',
-    '请输出 100–200 字的日记正文。',
+    `请输出 ${targetText}的日记正文。`,
   ].join('\n');
 
   return {
@@ -365,7 +404,13 @@ export function buildDiaryPrompt({ archive, persona, onlyUnsummarized = true }) 
       { role: 'system', content: system },
       { role: 'user', content: user },
     ],
-    meta: { sourceMessages: segment.length, transcriptChars: transcript.length },
+    meta: {
+      sourceMessages: segment.length,
+      transcriptChars: transcript.length,
+      memoryStrength: strength,
+      targetMin,
+      targetMax,
+    },
   };
 }
 

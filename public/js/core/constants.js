@@ -135,6 +135,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   rememberKeys: true,
   demoMode: false,
   contextChars: LIMITS.contextChars,
+  diaryMemoryStrength: 40,
 });
 
 export const STORY_SEEDS = Object.freeze([

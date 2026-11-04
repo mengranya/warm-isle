@@ -14,6 +14,10 @@ import {
   STATUS_FIELDS,
 } from '../core/constants.js';
 import {
+  FULL_MEMORY_MAX_CHARS,
+  normalizeMemoryStrength,
+} from '../core/memory-strength.js';
+import {
   clamp,
   clone,
   compactText,
@@ -241,11 +245,15 @@ function normalizeMessage(input, index) {
 
 function normalizeDiary(input, index) {
   if (!input || typeof input !== 'object') return null;
-  const content = normalizeWhitespace(input.content ?? input.summary ?? '').slice(0, 2_000);
+  const content = normalizeWhitespace(input.content ?? input.summary ?? '').slice(
+    0,
+    FULL_MEMORY_MAX_CHARS,
+  );
   if (!content) return null;
   return {
     id: asString(input.id, '', 80) || createId('diary'),
     content,
+    memoryStrength: normalizeMemoryStrength(input.memoryStrength, 40),
     createdAt: normalizeDate(input.createdAt || input.at),
     messageCount: Math.max(0, Math.round(safeNumber(input.messageCount))),
     rangeStart: Math.max(0, Math.round(safeNumber(input.rangeStart, index))),
@@ -506,6 +514,10 @@ export function normalizeSettings(input) {
     demoMode: source.demoMode === true,
     contextChars: Math.round(
       clamp(safeNumber(source.contextChars, LIMITS.contextChars), 1_800, 12_000),
+    ),
+    diaryMemoryStrength: normalizeMemoryStrength(
+      source.diaryMemoryStrength,
+      DEFAULT_SETTINGS.diaryMemoryStrength,
     ),
     keyVault,
   };

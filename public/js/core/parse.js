@@ -191,7 +191,7 @@ export function extractDiaryText(raw) {
     .replace(/\*\*/g, '')
     .replace(/\r\n/g, '\n')
     .trim();
-  return normalizeWhitespace(text).slice(0, 1_200);
+  return normalizeWhitespace(text).slice(0, 200_000);
 }
 
 export function diaryCharCount(text) {

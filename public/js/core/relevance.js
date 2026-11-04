@@ -3,6 +3,7 @@
  * 用于从世界书条目与日记中挑选与当前对话最相关的内容。
  */
 
+import { normalizeMemoryStrength } from './memory-strength.js';
 import { compilePluginRuntime } from './plugins.js';
 import { compactText, truncateText } from './utils.js';
 
@@ -177,9 +178,16 @@ export function selectDiaries(
   let chars = 0;
   for (const item of ordered) {
     if (selected.length >= maxEntries) break;
-    const content = truncateText(compactText(item.diary.content, 280), 280);
+    const strength = normalizeMemoryStrength(item.diary.memoryStrength, 40);
+    if (strength <= 0) continue;
+    const full = strength >= 100;
+    const perDiaryLimit =
+      strength >= 100 ? 50_000 : strength >= 81 ? 1_800 : strength >= 61 ? 900 : strength >= 41 ? 450 : 280;
+    const content = full
+      ? String(item.diary.content || '')
+      : truncateText(compactText(item.diary.content, perDiaryLimit), perDiaryLimit);
     const cost = content.length + 14;
-    if (chars + cost > maxChars && selected.length > 0) continue;
+    if (!full && chars + cost > maxChars && selected.length > 0) continue;
     selected.push({
       ...item.diary,
       excerpt: content,

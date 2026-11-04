@@ -5,8 +5,18 @@
 
 import { STATUS_FIELDS } from '../core/constants.js';
 import { demoDiary, demoNpc } from '../core/demo.js';
+import {
+  FULL_MEMORY_MAX_CHARS,
+  MEMORY_STRENGTH_LEVELS,
+  getMemoryStrengthMeta,
+  normalizeMemoryStrength,
+} from '../core/memory-strength.js';
 import { extractDiaryText, extractNpcDraft } from '../core/parse.js';
-import { buildDiaryPrompt, buildNpcPrompt } from '../core/prompt.js';
+import {
+  buildDiaryPrompt,
+  buildFullDiaryTranscript,
+  buildNpcPrompt,
+} from '../core/prompt.js';
 import {
   countChars,
   createId,
@@ -562,7 +572,7 @@ export function openDiaryViewer(app, archiveId) {
                 }),
                 h('p', {
                   class: 'diary-entry-meta',
-                  text: `${diary.messageCount || 0} 条对话 · ${countChars(diary.content)} 字`,
+                  text: `${diary.messageCount || 0} 条对话 · ${countChars(diary.content)} 字 · 记忆强度 ${normalizeMemoryStrength(diary.memoryStrength, 40)}%`,
                 }),
               ),
             ),
@@ -614,7 +624,11 @@ export function openDiaryViewer(app, archiveId) {
   });
 }
 
-export async function openDiaryGenerator(app, archiveId, { onSaved } = {}) {
+export async function openDiaryGenerator(
+  app,
+  archiveId,
+  { onSaved, memoryStrength: requestedStrength = null } = {},
+) {
   const archive = app.store.getArchive(archiveId);
   if (!archive) return null;
   const segment = archive.messages.slice(archive.summarizedUntil || 0);
@@ -625,22 +639,50 @@ export async function openDiaryGenerator(app, archiveId, { onSaved } = {}) {
 
   const { settings, apiKey } = currentSettings(app);
   const persona = app.store.getPersona(archive.personaId);
-  const prompt = buildDiaryPrompt({ archive, persona });
-  const promptText = prompt.messages.map((message) => message.content).join('\n');
+  const initialStrength = normalizeMemoryStrength(
+    requestedStrength ?? settings.diaryMemoryStrength,
+    40,
+  );
+  const strengthMeta = getMemoryStrengthMeta(initialStrength);
+  const fullTranscript = buildFullDiaryTranscript(archive, {
+    start: archive.summarizedUntil || 0,
+  });
+  const prompt =
+    initialStrength > 0 && initialStrength < 100
+      ? buildDiaryPrompt({
+          archive,
+          persona,
+          memoryStrength: initialStrength,
+        })
+      : null;
+  const promptText = prompt ? prompt.messages.map((message) => message.content).join('\n') : '';
 
   let closedByUser = false;
   let completed = false;
   const abortController = new AbortController();
   const progressCopy = h('p', {
     class: 'progress-copy',
-    text: `正在把最近的 ${segment.length} 条对话折叠成一段记忆…`,
+    text:
+      initialStrength <= 0
+        ? '正在把这一章设为不记忆…'
+        : initialStrength >= 100
+          ? '正在保存这一章的完整对话…'
+          : `正在把最近的 ${segment.length} 条对话整理成 ${strengthMeta.label}…`,
   });
   const progressBody = h(
     'div',
     { class: 'progress-state' },
     h('span', { class: 'spinner large' }),
     progressCopy,
-    h('p', { class: 'muted small', text: '日记会压缩到 100–200 字；完成后你可以先修改再保存。' }),
+    h('p', {
+      class: 'muted small',
+      text:
+        initialStrength <= 0
+          ? '保存后本章不会留下任何日记记忆。'
+          : initialStrength >= 100
+            ? '100% 会保留本章全部对话原文，不再压缩。'
+            : `目标长度：${strengthMeta.target}；完成后可以先修改再保存。`,
+    }),
   );
 
   const progressModal = openModal({
@@ -660,7 +702,13 @@ export async function openDiaryGenerator(app, archiveId, { onSaved } = {}) {
   let usage = null;
   let cached = false;
   try {
-    if (settings.demoMode) {
+    if (initialStrength <= 0) {
+      generatedText = '';
+      resultModel = 'none';
+    } else if (initialStrength >= 100) {
+      generatedText = fullTranscript;
+      resultModel = 'full-transcript';
+    } else if (settings.demoMode) {
       await new Promise((resolve) => setTimeout(resolve, 700));
       generatedText = demoDiary({ persona, archive });
       resultModel = 'demo';
@@ -693,6 +741,7 @@ export async function openDiaryGenerator(app, archiveId, { onSaved } = {}) {
           tokens: usage?.totalTokens || 0,
           cached,
           messages: segment.length,
+          memoryStrength: initialStrength,
         },
       });
     }
@@ -716,71 +765,256 @@ export async function openDiaryGenerator(app, archiveId, { onSaved } = {}) {
     cached,
     segmentCount: segment.length,
     onSaved,
+    memoryStrength: initialStrength,
+    fullTranscript,
+    onRegenerate: (nextStrength) =>
+      openDiaryGenerator(app, archiveId, {
+        onSaved,
+        memoryStrength: nextStrength,
+      }),
   });
 }
 
 function openDiaryEditor(
   app,
-  { archive, generatedText, resultModel, usage, cached, segmentCount, onSaved },
+  {
+    archive,
+    generatedText,
+    resultModel,
+    usage,
+    cached,
+    segmentCount,
+    onSaved,
+    memoryStrength: initialStrength,
+    fullTranscript,
+    onRegenerate,
+  },
 ) {
   const editor = textarea({
     id: 'diary-content',
     value: generatedText,
     rows: 8,
-    maxLength: 1_200,
+    maxLength: FULL_MEMORY_MAX_CHARS,
     autofocus: true,
   });
   const counter = h('span', { class: 'char-counter' });
   const rangeHint = h('p', { class: 'field-hint' });
+  let currentStrength = normalizeMemoryStrength(initialStrength, 40);
+  let modal = null;
+
+  const strengthValue = h('strong', {
+    class: 'memory-strength-value',
+    text: `${currentStrength}%`,
+  });
+  const strengthLabel = h('span', { class: 'memory-strength-label' });
+  const strengthTarget = h('span', { class: 'memory-strength-target' });
+  const strengthRange = h('input', {
+    class: 'memory-strength-range',
+    type: 'range',
+    min: '0',
+    max: '100',
+    step: '1',
+    value: String(currentStrength),
+    'aria-label': '日记记忆强度',
+  });
+  const memoryRows = new Map();
+  const memoryTable = h(
+    'div',
+    { class: 'memory-strength-table', role: 'table', 'aria-label': '记忆强度对照表' },
+    h(
+      'div',
+      { class: 'memory-strength-table-head', role: 'row' },
+      h('span', { role: 'columnheader', text: '强度' }),
+      h('span', { role: 'columnheader', text: '记忆程度' }),
+      h('span', { role: 'columnheader', text: '大约记住' }),
+    ),
+    ...MEMORY_STRENGTH_LEVELS.map((level) => {
+      const row = h(
+        'div',
+        { class: 'memory-strength-row', role: 'row' },
+        h('strong', {
+          role: 'cell',
+          text: level.min === level.max ? `${level.min}%` : `${level.min}–${level.max}%`,
+        }),
+        h('span', { role: 'cell', text: level.label }),
+        h('small', { role: 'cell', text: level.target }),
+        h('p', { role: 'cell', text: level.description }),
+      );
+      memoryRows.set(level, row);
+      return row;
+    }),
+  );
+  const memoryPanel = h(
+    'section',
+    { class: 'diary-memory-panel' },
+    h(
+      'div',
+      { class: 'diary-memory-head' },
+      h(
+        'div',
+        {},
+        h('span', { class: 'field-label', text: '记忆强度' }),
+        h('p', {
+          class: 'field-hint',
+          text: '数值越高，日记越长、细节越多；0% 不记忆，100% 保存完整对话。',
+        }),
+      ),
+      strengthValue,
+    ),
+    h('div', { class: 'memory-strength-readout' }, strengthLabel, strengthTarget),
+    strengthRange,
+    memoryTable,
+  );
+
+  const updateStrengthUi = () => {
+    const meta = getMemoryStrengthMeta(currentStrength);
+    const target = meta.target;
+    strengthRange.value = String(currentStrength);
+    strengthValue.textContent = `${currentStrength}%`;
+    strengthLabel.textContent = meta.label;
+    strengthTarget.textContent = target;
+    for (const [level, row] of memoryRows) {
+      const active = currentStrength >= level.min && currentStrength <= level.max;
+      row.classList.toggle('is-active', active);
+      if (active) {
+        const top = row.offsetTop - memoryTable.offsetTop;
+        const bottom = top + row.offsetHeight;
+        if (top < memoryTable.scrollTop || bottom > memoryTable.scrollTop + memoryTable.clientHeight) {
+          memoryTable.scrollTop = Math.max(0, top - 6);
+        }
+      }
+    }
+    editor.disabled = currentStrength <= 0;
+    editor.placeholder =
+      currentStrength <= 0
+        ? '0%：本章不保存日记，也不会被后续对话记住。'
+        : '';
+    if (currentStrength >= 100 && editor.value.trim() !== fullTranscript) {
+      editor.value = fullTranscript;
+    }
+    updateCount();
+  };
+
   const updateCount = () => {
     const count = countChars(editor.value.replace(/\s+/g, ''));
     counter.textContent = `${count} 字`;
-    rangeHint.textContent =
-      count > 200
-        ? '超过了建议的 200 字，仍可保存，但会占用更多记忆预算。'
-        : count < 100
-          ? '少于建议的 100 字，记忆可能不够完整。'
-          : '长度合适，按保存后会作为后续对话的记忆。';
-    counter.classList.toggle('is-over', count > 200);
+    if (currentStrength <= 0) {
+      rangeHint.textContent = '0%：不保存日记，本章不会进入后续记忆。';
+      counter.classList.remove('is-over');
+      return;
+    }
+    const meta = getMemoryStrengthMeta(currentStrength);
+    const targetMax = Number(meta.target.match(/(\d+)\s*字$/)?.[1] || 0);
+    rangeHint.textContent = `当前 ${currentStrength}% · ${meta.label}；目标 ${meta.target}，当前 ${count} 字。`;
+    counter.classList.toggle('is-over', Boolean(targetMax && count > targetMax * 1.25));
   };
   editor.addEventListener('input', updateCount);
-  updateCount();
+  strengthRange.addEventListener('input', () => {
+    currentStrength = normalizeMemoryStrength(strengthRange.value, 40);
+    updateStrengthUi();
+    updateUsageNote();
+  });
 
-  const usageNote = usage?.totalTokens
-    ? `本次生成 ${usage.totalTokens} tokens${usage.estimated ? '（估算）' : ''}${cached ? ' · 本地缓存' : ''}`
-    : '演示模式，不消耗 token';
+  const usageNote = h('span', { class: 'muted small' });
+  const updateUsageNote = () => {
+    usageNote.textContent =
+      currentStrength <= 0
+        ? '不生成日记'
+        : currentStrength >= 100
+          ? '完整对话，不调用 AI 压缩'
+          : usage?.totalTokens
+            ? `本次生成 ${usage.totalTokens} tokens${usage.estimated ? '（估算）' : ''}${cached ? ' · 本地缓存' : ''}`
+            : '演示模式，不消耗 token';
+  };
+
+  updateStrengthUi();
+  updateCount();
+  updateUsageNote();
+
+  const regenerateButton =
+    typeof onRegenerate === 'function'
+      ? h(
+          'button',
+          {
+            class: 'btn btn-soft btn-sm',
+            type: 'button',
+            onclick: async () => {
+              const ok = await confirmDialog({
+                title: '按当前强度重新生成？',
+                message: '当前草稿会被新生成的内容替换。记忆强度相同则不会改变。',
+                confirmText: '重新生成',
+              });
+              if (!ok) return;
+              modal?.close();
+              onRegenerate(currentStrength);
+            },
+          },
+          icon('refresh'),
+          h('span', { text: '按当前强度重新生成' }),
+        )
+      : null;
 
   const body = h(
     'div',
     { class: 'diary-editor' },
+    memoryPanel,
     h(
       'div',
       { class: 'diary-editor-meta' },
       h('span', { class: 'tag tag-warm', text: `${segmentCount} 条对话` }),
-      h('span', { class: 'muted small', text: usageNote }),
+      usageNote,
+      regenerateButton,
     ),
-    h('label', { class: 'field', for: 'diary-content' },
-      h('span', { class: 'field-label', text: '日记正文' }), editor,
+    h(
+      'label',
+      { class: 'field', for: 'diary-content' },
+      h('span', { class: 'field-label', text: '日记正文' }),
+      editor,
       h('div', { class: 'field-counter-row' }, rangeHint, counter),
     ),
     h('p', {
       class: 'muted small',
-      text: '保存后，这段对话会从下一轮提示词中被日记替代，显著减少 token 消耗。',
+      text:
+        currentStrength <= 0
+          ? '保存后会直接跳过这一章的记忆，不会创建日记。'
+          : currentStrength >= 100
+            ? '100% 保存完整对话，可能显著增加后续提示词长度。'
+            : '保存后，这段对话会从下一轮提示词中被这篇日记替代。',
     }),
   );
 
-  return openModal({
+  modal = openModal({
     title: '这一章，留下了什么',
     eyebrow: archive.name,
-    subtitle: '可以修改 AI 的草稿。日记越准确，之后越省 token。',
+    subtitle: '可以修改草稿，并用记忆强度决定保留多少。',
     size: 'lg',
     body,
     actions: [
       { label: '放弃', variant: 'ghost' },
       {
-        label: '保存日记',
+        label: '保存本章',
         variant: 'primary',
         onClick: () => {
+          const now = new Date().toISOString();
+          if (currentStrength <= 0) {
+            app.store.update(
+              (state) => {
+                const target = state.archives.find((item) => item.id === archive.id);
+                if (!target) return;
+                target.summarizedUntil = target.messages.length;
+                target.updatedAt = now;
+                state.settings.diaryMemoryStrength = 0;
+              },
+              { reason: 'diary-skipped', archiveId: archive.id },
+            );
+            app.store.info('diary.skipped', '本章设为不记忆，没有创建日记。', {
+              archiveId: archive.id,
+              detail: { memoryStrength: 0, messageCount: segmentCount },
+            });
+            toast('本章不会留下记忆。', { type: 'info' });
+            onSaved?.(null);
+            return true;
+          }
           const content = editor.value.trim();
           const charCount = countChars(content.replace(/\s+/g, ''));
           if (charCount < 20) {
@@ -788,10 +1022,10 @@ function openDiaryEditor(
             editor.focus();
             return false;
           }
-          const now = new Date().toISOString();
           const diary = {
             id: createId('diary'),
             content,
+            memoryStrength: currentStrength,
             createdAt: now,
             messageCount: archive.messages.length - (archive.summarizedUntil || 0),
             rangeStart: archive.summarizedUntil || 0,
@@ -806,19 +1040,30 @@ function openDiaryEditor(
               target.diaries.push(diary);
               target.summarizedUntil = target.messages.length;
               target.updatedAt = now;
+              state.settings.diaryMemoryStrength = currentStrength;
             },
             { reason: 'diary-saved', archiveId: archive.id },
           );
-          app.store.info('diary.saved', `保存了章节日记，对话记忆已压缩为 ${charCount} 字。`, {
-            archiveId: archive.id,
-            detail: { diaryId: diary.id, messageCount: diary.messageCount },
-          });
-          toastSuccess('日记已保存，之后的对话会更省 token。');
+          app.store.info(
+            'diary.saved',
+            `保存了章节日记（记忆强度 ${currentStrength}%），对话记忆为 ${charCount} 字。`,
+            {
+              archiveId: archive.id,
+              detail: {
+                diaryId: diary.id,
+                messageCount: diary.messageCount,
+                memoryStrength: currentStrength,
+              },
+            },
+          );
+          toastSuccess(`日记已保存（记忆强度 ${currentStrength}%）。`);
           onSaved?.(diary);
+          return true;
         },
       },
     ],
   });
+  return modal;
 }
 
 /* ------------------------------------------------------------------ */

@@ -234,10 +234,10 @@ export async function render(root, app) {
               return;
             }
             openDiaryGenerator(app, initialArchive.id, {
-              onSaved: () => {
+              onSaved: (diary) => {
                 refreshMemory();
                 refreshHeaderMeta();
-                appendMemoryFold();
+                if (diary) appendMemoryFold();
                 updateComposerHint();
               },
             });
@@ -530,10 +530,10 @@ export async function render(root, app) {
               return;
             }
             openDiaryGenerator(app, initialArchive.id, {
-              onSaved: () => {
+              onSaved: (diary) => {
                 refreshMemory();
                 refreshHeaderMeta();
-                appendMemoryFold();
+                if (diary) appendMemoryFold();
                 updateComposerHint();
               },
             });

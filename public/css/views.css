@@ -3580,13 +3580,130 @@
 .diary-editor-meta {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   margin-bottom: 12px;
+}
+
+.diary-editor-meta .btn {
+  margin-left: auto;
+}
+
+.diary-memory-panel {
+  margin-bottom: 15px;
+  padding: 14px;
+  border: 1px solid rgba(220, 203, 184, 0.85);
+  border-radius: 15px;
+  background: linear-gradient(150deg, #fbf4e9, #f7efe3);
+}
+
+.diary-memory-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.diary-memory-head p {
+  margin: 3px 0 0;
+}
+
+.memory-strength-value {
+  flex: 0 0 auto;
+  color: #9a6147;
+  font-family: var(--font-display);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.memory-strength-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 10px;
+  margin: 10px 0 6px;
+  font-size: 11px;
+}
+
+.memory-strength-label {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.memory-strength-target {
+  color: var(--muted);
+}
+
+.memory-strength-range {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.memory-strength-table {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 205px;
+  overflow-y: auto;
+  margin-top: 12px;
+  border-top: 1px dashed rgba(190, 159, 126, 0.35);
+  padding-top: 9px;
+  scrollbar-gutter: stable;
+}
+
+.memory-strength-table-head,
+.memory-strength-row {
+  display: grid;
+  grid-template-columns: 58px 95px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  padding: 5px 7px;
+  border-radius: 8px;
+}
+
+.memory-strength-table-head {
+  color: var(--muted-light);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.memory-strength-row {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.memory-strength-row strong {
+  color: var(--ink-soft);
+  font-size: 10.5px;
+}
+
+.memory-strength-row small {
+  font-size: 9px;
+}
+
+.memory-strength-row p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted-light);
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.memory-strength-row.is-active {
+  background: rgba(255, 253, 247, 0.9);
+  box-shadow: inset 2px 0 0 rgba(195, 107, 86, 0.55);
 }
 
 .diary-editor .field-counter-row {
   flex-wrap: wrap;
 }
+
+@media (max-width: 959px) {
+  .memory-strength-table {
+    max-height: 150px;
+  }
+}
+
+
 
 .diary-editor .field-hint {
   flex: 1;
