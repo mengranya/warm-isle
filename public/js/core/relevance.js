@@ -223,7 +223,7 @@ export function selectPlugins(plugins, { maxChars = 7_000, maxPlugins = 16 } = {
 export function trimHistory(
   messages,
   summarizedUntil = 0,
-  { maxChars = 1_700, maxMessages = 12, maxMessageChars = 1_200 } = {},
+  { maxChars = 1_700, maxMessages = 40, maxMessageChars = 1_600 } = {},
 ) {
   const source = (Array.isArray(messages) ? messages : [])
     .slice(Math.max(0, summarizedUntil))
@@ -231,7 +231,7 @@ export function trimHistory(
 
   const picked = [];
   let chars = 0;
-  const perMessageLimit = Math.max(300, Number(maxMessageChars) || 1_200);
+  const perMessageLimit = Math.max(300, Number(maxMessageChars) || 1_600);
   for (let index = source.length - 1; index >= 0; index -= 1) {
     const message = source[index];
     const content = truncateText(
@@ -245,5 +245,10 @@ export function trimHistory(
     chars += cost;
   }
 
-  return { messages: picked, chars, summarizedCount: Math.max(0, summarizedUntil) };
+  return {
+    messages: picked,
+    chars,
+    summarizedCount: Math.max(0, summarizedUntil),
+    droppedCount: Math.max(0, source.length - picked.length),
+  };
 }

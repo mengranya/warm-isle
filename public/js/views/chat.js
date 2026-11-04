@@ -140,6 +140,7 @@ export async function render(root, app) {
   let paintFrame = 0;
   let lastErrorCard = null;
   let pluginTokenNoticeShown = false;
+  let historyNoticeShown = false;
 
   const page = h('div', { class: 'page page-chat' });
   root.appendChild(page);
@@ -1590,6 +1591,13 @@ export async function render(root, app) {
       toast(
         `插件要求长篇幅：本轮输出上限已临时提高到 ${effectiveMaxTokens} tokens（设置值 ${configuredMaxTokens}）。`,
         { type: 'info', duration: 6_500 },
+      );
+    }
+    if (prompt.meta.historyDropped > 0 && !historyNoticeShown) {
+      historyNoticeShown = true;
+      toast(
+        `上下文预算已满，本轮省略了 ${prompt.meta.historyDropped} 条较早对话。可在设置提高上下文预算，或用「强记忆」固定关键细节。`,
+        { type: 'info', duration: 7_000 },
       );
     }
 

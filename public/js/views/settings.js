@@ -414,7 +414,7 @@ export async function render(root, app) {
         contextRange,
         h('p', {
           class: 'field-hint',
-          text: '默认 4600 字符，约 3000–4500 tokens。插件优先完整载入，其余预算分配给世界书、日记与最近对话。',
+          text: '默认 4600 字符，约 3000–4500 tokens。长对话建议提高到 7000–9000，让更多未压缩对话进入上下文；插件优先完整载入，其余预算按世界书、日记与最近对话分配。',
         }),
       ),
       h(

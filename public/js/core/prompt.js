@@ -107,7 +107,7 @@ function formatStatus(status) {
 
 function buildQueryText(archive, persona, worldbook) {
   const recent = (archive.messages || [])
-    .slice(-6)
+    .slice(-10)
     .map((message) => message.content)
     .join('\n');
   return [
@@ -150,10 +150,10 @@ export function buildChatPrompt({
 
   // 插件完整载入后再分配剩余预算，避免插件挤占关键上下文时被静默截断。
   const remainingBudget = Math.max(1_800, totalBudget - pluginRuntime.totalChars);
-  const worldBudget = Math.max(500, Math.round(remainingBudget * 0.3));
-  const diaryBudget = Math.max(340, Math.round(remainingBudget * 0.2));
+  const worldBudget = Math.max(500, Math.round(remainingBudget * 0.26));
+  const diaryBudget = Math.max(340, Math.round(remainingBudget * 0.19));
   let historyBudget = Math.max(
-    700,
+    900,
     remainingBudget - worldBudget - diaryBudget,
   );
   const longOutput = pluginRuntime.length.hasConstraint;
@@ -177,15 +177,21 @@ export function buildChatPrompt({
 
   const worldSelection = selectWorldEntries(worldbook, queryText, {
     maxChars: worldBudget,
-    maxEntries: 4,
+    maxEntries: 5,
   });
   const diarySelection = selectDiaries(archive.diaries || [], queryText, {
     maxChars: diaryBudget,
-    maxEntries: 4,
+    maxEntries: 6,
   });
+  // 世界书/日记没用完的预算交还给最近对话，避免明明有余量却只带 12 条消息。
+  const unusedContextBudget = Math.max(
+    0,
+    remainingBudget - worldSelection.chars - diarySelection.chars,
+  );
+  historyBudget = Math.max(historyBudget, unusedContextBudget);
   const historySelection = trimHistory(archive.messages, archive.summarizedUntil || 0, {
     maxChars: historyBudget,
-    maxMessages: 12,
+    maxMessages: 40,
     maxMessageChars: perMessageChars,
   });
 
@@ -246,6 +252,7 @@ export function buildChatPrompt({
     lengthRule,
     npcRule,
     '保持与人格口吻、关系进度和世界书事实一致；不要重复上一轮已经说过的信息。',
+    '续写前先对齐已出现的人名、约定、物品、地点与时间；玩家明确给出的细节不得被替换、遗漏或凭空改写。',
     questionRule,
     pluginFlags.integrityFirst
       ? '完整收尾优先于压字数；不得已需要压缩时，先删修饰和重复，保留核心结论与关键动作。'
@@ -294,6 +301,7 @@ export function buildChatPrompt({
       estimatedTokens: estimateTokens(messages.map((message) => message.content).join('\n')),
       historyMessages: historySelection.messages.length,
       historyChars: historySelection.chars,
+      historyDropped: historySelection.droppedCount,
       worldEntries: worldSelection.selected.map((entry) => entry.title),
       diaryIds: diarySelection.selected.map((diary) => diary.id),
       pluginIds: pluginRuntime.selected.map((plugin) => plugin.id),
