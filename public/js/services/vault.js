@@ -35,7 +35,12 @@ function getOrCreateMasterKey() {
   if (masterKeyPromise) return masterKeyPromise;
   masterKeyPromise = (async () => {
     if (!globalThis.crypto?.subtle) {
-      throw new Error('当前环境不支持 WebCrypto，无法安全保存 API Key。');
+      const protocol = String(globalThis.location?.protocol || '');
+      throw new Error(
+        protocol !== 'https:'
+          ? '当前页面不是 HTTPS，浏览器不会提供 WebCrypto，无法加密保存 API Key。请改用 https:// 地址打开；如果暂时只能使用 HTTP，请关闭“在这台设备记住密钥”，密钥仅在本次会话有效。'
+          : '当前浏览器或内置 WebView 不支持 WebCrypto，无法加密保存 API Key。请更新系统浏览器，或关闭“在这台设备记住密钥”仅本次会话使用。',
+      );
     }
     const db = await openVaultDb();
     const existing = await new Promise((resolve, reject) => {

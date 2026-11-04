@@ -140,6 +140,15 @@ export async function render(root, app) {
       updateConfigSummary();
     },
   });
+  const cryptoWarning = globalThis.crypto?.subtle
+    ? null
+    : h('p', {
+        class: 'field-hint',
+        text:
+          location.protocol === 'https:'
+            ? '当前浏览器不支持 WebCrypto。请更新系统浏览器，或关闭“记住密钥”仅在本次会话使用。'
+            : '当前不是 HTTPS，浏览器不会提供 WebCrypto。请改用 https:// 地址；或关闭“记住密钥”仅在本次会话使用。',
+      });
 
   const temperatureRange = h('input', {
     type: 'range',
@@ -320,6 +329,7 @@ export async function render(root, app) {
       ),
       useServerKeyCheck,
       rememberKeyCheck,
+      cryptoWarning,
       serverKeyHint,
       h('div', { class: 'settings-divider' }),
       h(

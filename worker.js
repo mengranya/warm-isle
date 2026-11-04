@@ -37,6 +37,11 @@ function withHeaders(response, pathname) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // API Key 加密依赖 WebCrypto，必须优先进入安全上下文。
+    if (url.protocol === 'http:') {
+      url.protocol = 'https:';
+      return Response.redirect(url.toString(), 301);
+    }
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       return withHeaders(await onRequest({ request, env, ctx }), url.pathname);
     }
