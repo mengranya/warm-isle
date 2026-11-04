@@ -214,6 +214,22 @@ export async function render(root, app) {
     description: '不调用模型、不计费，用本地模板模拟对话与日记，适合先体验界面。',
     onChange: () => updateConfigSummary(),
   });
+  const demoToggleInput = demoToggle.querySelector('input');
+  demoToggleInput.addEventListener('change', () => {
+    const enabled = demoToggleInput.checked;
+    store.update(
+      (state) => {
+        state.settings.demoMode = enabled;
+      },
+      { reason: 'demo-mode-changed' },
+    );
+    settings.demoMode = enabled;
+    app.refreshChrome();
+    updateConfigSummary();
+    toast(enabled ? '已开启离线演示模式。' : '已关闭离线演示模式，接下来会调用模型。', {
+      type: 'info',
+    });
+  });
 
   const testResult = h('div', { class: 'connection-result', hidden: true });
   const testButton = h(
@@ -233,6 +249,7 @@ export async function render(root, app) {
   const summaryModel = h('span');
   const summaryStatus = h('span');
   const summaryKey = h('span');
+  const summaryDemo = h('span', { text: settings.demoMode ? '开启' : '关闭' });
 
   /* ------------------------------ 页面结构 ------------------------------ */
 
@@ -440,7 +457,7 @@ export async function render(root, app) {
           h('div', { class: 'summary-divider' }),
           h('div', { class: 'summary-row' }, h('span', { text: '状态' }), summaryStatus),
           h('div', { class: 'summary-row' }, h('span', { text: '密钥来源' }), summaryKey),
-          h('div', { class: 'summary-row' }, h('span', { text: '演示模式' }), h('span', { text: settings.demoMode ? '开启' : '关闭' })),
+          h('div', { class: 'summary-row' }, h('span', { text: '演示模式' }), summaryDemo),
           h(
             'div',
             { class: 'summary-note' },
@@ -571,7 +588,11 @@ export async function render(root, app) {
       h('option', { value: '__custom__', text: '自定义模型 ID…' }),
     );
 
-    const currentModel = currentProvider === settings.provider ? settings.model : models[0]?.id || '__custom__';
+    const liveSettings = store.state.settings;
+    const currentModel =
+      currentProvider === liveSettings.provider
+        ? liveSettings.model
+        : models[0]?.id || '__custom__';
     if (models.some((model) => model.id === currentModel)) {
       modelSelect.value = currentModel;
       modelCustomInput.value = '';
@@ -689,7 +710,7 @@ export async function render(root, app) {
 
     const hasLocal = Boolean(keyInput.value.trim() || app.runtime.apiKeys?.[currentProvider]);
     const hasServer = Boolean(app.runtime.health?.serverKeys?.[currentProvider]);
-    if (settings.demoMode || demoToggle.querySelector('input').checked) {
+    if (demoToggleInput.checked) {
       return { label: '演示模式', className: 'demo' };
     }
     if (!app.runtime.health?.ok) return { label: '服务离线', className: 'offline' };
@@ -713,7 +734,7 @@ export async function render(root, app) {
     const hasServer = Boolean(app.runtime.health?.serverKeys?.[currentProvider]);
     const hasLocal = Boolean(keyInput.value.trim() || app.runtime.apiKeys?.[currentProvider]);
     const preferServer = useServerKeyCheck.querySelector('input').checked;
-    if (settings.demoMode || demoToggle.querySelector('input').checked) {
+    if (demoToggleInput.checked) {
       summaryKey.textContent = '演示模式 · 不调用';
     } else if (preferServer && hasServer) {
       summaryKey.textContent = '服务端环境变量';
@@ -724,6 +745,7 @@ export async function render(root, app) {
     } else {
       summaryKey.textContent = '未配置';
     }
+    summaryDemo.textContent = demoToggleInput.checked ? '开启' : '关闭';
     updateSettingsChip();
   }
 
@@ -872,7 +894,7 @@ export async function render(root, app) {
       temperature: safeNumber(temperatureRange.value, 0.9),
       maxTokens: Math.round(safeNumber(maxTokensRange.value, 800)),
       stream: streamToggle.querySelector('input').checked,
-      demoMode: demoToggle.querySelector('input').checked,
+      demoMode: demoToggleInput.checked,
       useServerKey: useServer,
       rememberKeys: remember,
       contextChars: Math.round(safeNumber(contextRange.value, LIMITS.contextChars)),
@@ -921,7 +943,7 @@ export async function render(root, app) {
     rememberChanged = true;
     updateConfigSummary();
   });
-  demoToggle.querySelector('input').addEventListener('change', updateConfigSummary);
+
 
   /* ------------------------------ 侧栏信息 ------------------------------ */
 
@@ -966,7 +988,7 @@ export async function render(root, app) {
   }
 
   switchProvider(currentProvider);
-  baseUrlInput.value = settings.baseUrl || '';
+  baseUrlInput.value = store.state.settings.baseUrl || '';
   keyInput.value = keyDrafts[currentProvider] || '';
   updateKeyStatus();
   updateConfigSummary();

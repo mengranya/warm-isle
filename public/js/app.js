@@ -299,6 +299,8 @@ const app = {
       if (serialized) target += `?${serialized}`;
     }
     if (window.location.hash === target) {
+      // 已经在同一页时不再清空重绘，避免安卓 WebView 出现整页空白闪烁。
+      if (this.runtime.route === safeRoute && !query) return;
       this.renderRoute();
       return;
     }
@@ -759,7 +761,9 @@ const app = {
     });
     qs('#menu-btn')?.addEventListener('click', () => this.toggleSidebar());
     qs('#sidebar-scrim')?.addEventListener('click', () => this.closeSidebar());
-    qs('#ai-status')?.addEventListener('click', () => this.navigate('settings'));
+    qs('#ai-status')?.addEventListener('click', () => {
+      if (this.runtime.route !== 'settings') this.navigate('settings');
+    });
     qs('#token-hud')?.addEventListener('click', () => this.openTokenStats());
 
     document.addEventListener('keydown', (event) => {
