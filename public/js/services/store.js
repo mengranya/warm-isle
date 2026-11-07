@@ -7,7 +7,7 @@
  */
 
 import { LIMITS } from '../core/constants.js';
-import { addUsage, clone, createId, createUsageBucket, safeNumber } from '../core/utils.js';
+import { addUsage, createId, createUsageBucket, safeNumber } from '../core/utils.js';
 import { normalizeState, createInitialState } from '../data/schemas.js';
 import { loadState, saveState } from './storage.js';
 
@@ -79,17 +79,25 @@ export class Store {
   scheduleSave(delay = 350) {
     clearTimeout(this.saveTimer);
     this.saveTimer = setTimeout(() => {
-      this.flush().catch(() => {});
+      const run = () => {
+        this.flush().catch(() => {});
+      };
+      // 让输入/渲染优先；长存档的状态快照不要插在按键之间执行。
+      if (typeof globalThis.requestIdleCallback === 'function') {
+        globalThis.requestIdleCallback(run, { timeout: 2_000 });
+      } else {
+        run();
+      }
     }, delay);
   }
 
   flush() {
     clearTimeout(this.saveTimer);
     this.saveTimer = null;
-    const snapshot = clone(this.state);
+    // 不再在主线程 structuredClone 整份状态；IndexedDB 会在 put 时完成快照。
     this.saveChain = this.saveChain
       .catch(() => {})
-      .then(() => saveState(snapshot))
+      .then(() => saveState(this.state))
       .then(() => {
         this.lastPersistenceError = null;
       })

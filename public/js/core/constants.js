@@ -5,7 +5,7 @@
 
 export const APP_NAME = '暖屿';
 export const APP_NAME_EN = 'Warm Isle';
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.8.1';
 export const SCHEMA_VERSION = 1;
 
 export const STORAGE = Object.freeze({

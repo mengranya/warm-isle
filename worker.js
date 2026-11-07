@@ -34,6 +34,38 @@ function withHeaders(response, pathname) {
   });
 }
 
+async function proxyControl(request, env, url) {
+  const origin = String(env?.CONTROL_ORIGIN || '').trim().replace(/\/+$/, '');
+  if (!origin) {
+    return new Response(JSON.stringify({ ok: true, announcements: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
+  }
+  try {
+    const upstream = await fetch(`${origin}${url.pathname}${url.search}`, {
+      method: request.method,
+      headers: {
+        'Content-Type': request.headers.get('content-type') || 'application/json',
+        Accept: 'application/json',
+      },
+      body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer(),
+    });
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch {
+    return new Response(JSON.stringify({ ok: true, announcements: [] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    });
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -41,6 +73,9 @@ export default {
     if (url.protocol === 'http:') {
       url.protocol = 'https:';
       return Response.redirect(url.toString(), 301);
+    }
+    if (url.pathname.startsWith('/api/control/')) {
+      return withHeaders(await proxyControl(request, env, url), url.pathname);
     }
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
       return withHeaders(await onRequest({ request, env, ctx }), url.pathname);

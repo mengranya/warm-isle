@@ -19,7 +19,7 @@ import {
   tag,
 } from '../ui/components.js';
 import { h, icon } from '../ui/dom.js';
-import { confirmDialog } from '../ui/modal.js';
+import { confirmDialog, openModal } from '../ui/modal.js';
 import { toast, toastError, toastSuccess } from '../ui/toast.js';
 
 export async function render(root, app) {
@@ -351,6 +351,18 @@ function renderPersonaCard(app, persona, activePersonaId) {
       h(
         'button',
         {
+          class: 'btn btn-soft btn-sm',
+          type: 'button',
+          title: '查看完整人格设定',
+          'aria-label': `查看 ${persona.name} 的人格设定`,
+          onclick: () => openPersonaProfile(persona),
+        },
+        icon('book'),
+        h('span', { text: '查看设定' }),
+      ),
+      h(
+        'button',
+        {
           class: 'icon-btn subtle',
           type: 'button',
           title: '导出人格 JSON',
@@ -377,6 +389,70 @@ function renderPersonaCard(app, persona, activePersonaId) {
           ),
     ),
   );
+}
+
+function openPersonaProfile(persona) {
+  const row = (label, value) =>
+    value
+      ? h(
+          'div',
+          { class: 'persona-profile-row' },
+          h('span', { class: 'persona-profile-label', text: label }),
+          h('p', { class: 'persona-profile-value', text: value }),
+        )
+      : null;
+  const list = (label, values) =>
+    Array.isArray(values) && values.length
+      ? row(label, values.join('、'))
+      : null;
+  const status = persona.openingStatus || {};
+  return openModal({
+    title: `${persona.name} · 人格设定`,
+    eyebrow: '只读查看',
+    subtitle: '这里只展示已保存的人格设定，不会修改人格或存档。',
+    size: 'lg',
+    body: h(
+      'div',
+      { class: 'persona-profile' },
+      h(
+        'div',
+        { class: 'persona-profile-head' },
+        avatar(persona, { size: 'lg' }),
+        h(
+          'div',
+          {},
+          h('h3', { text: persona.name }),
+          h('p', { class: 'muted small', text: persona.identity || '身份未设定' }),
+          h(
+            'div',
+            { class: 'persona-tags' },
+            ...(persona.tags || []).map((text) => tag(text, 'neutral')),
+          ),
+        ),
+      ),
+      h(
+        'div',
+        { class: 'persona-profile-grid' },
+        row('年龄', persona.age),
+        row('代词', persona.pronouns),
+        row('称呼', persona.address ? `「${persona.address}」` : ''),
+        row('性格', persona.personality),
+        row('外貌', persona.appearance),
+        row('背景', persona.background),
+        list('喜好', persona.likes),
+        row('对话习惯', persona.dialogue?.habits),
+        row('颜色', persona.dialogue?.color),
+        row('动画', animationLabel(persona.dialogue?.animation)),
+        row('开场问候', persona.greeting),
+        row('身体状态', status.health),
+        row('衣着', status.outfit),
+        row('环境', status.environment),
+        row('动作', status.action),
+        row('备注', status.notes),
+      ),
+    ),
+    actions: [{ label: '关闭', variant: 'primary' }],
+  });
 }
 
 function animationLabel(id) {

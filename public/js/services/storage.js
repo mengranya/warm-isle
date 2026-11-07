@@ -131,6 +131,34 @@ function writeLocalBackup(payload) {
   }
 }
 
+function removeLocalBackup() {
+  try {
+    globalThis.localStorage?.removeItem(STORAGE.backupKey);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * 大存档不再每次同步 JSON.stringify + gzip 整份状态。
+ * IndexedDB 本身会做结构化快照；LocalStorage 镜像只保留给小型存档，
+ * 避免长对话期间自动保存把输入线程卡死。
+ */
+function shouldMirrorToLocalStorage(state) {
+  let messages = 0;
+  let chars = 0;
+  const countMessages = (list) => {
+    if (!Array.isArray(list)) return;
+    for (const message of list) {
+      messages += 1;
+      chars += String(message?.content || '').length;
+    }
+  };
+  for (const archive of state.archives || []) countMessages(archive.messages);
+  for (const save of state.sandboxSaves || []) countMessages(save.messages);
+  return messages <= 400 && chars <= 250_000;
+}
+
 /**
  * 保存状态。返回实际使用的存储源。
  * 传入的对象必须是纯数据（不包含 File/Blob/函数）。
@@ -143,7 +171,6 @@ export async function saveState(state) {
       savedAt: new Date().toISOString(),
     },
   };
-  const json = JSON.stringify(snapshot);
   let idbSaved = false;
 
   try {
@@ -153,13 +180,20 @@ export async function saveState(state) {
     console.warn('IndexedDB 写入失败：', error?.message || error);
   }
 
-  // 备份始终写（压缩后通常很小），同时支持没有 IndexedDB 的环境。
-  try {
-    const compressed = await compressSnapshot(json);
-    // 避免极端情况下写爆 LocalStorage；超过约 4.2MB 时跳过。
-    if (compressed.length < 4.2 * 1024 * 1024) writeLocalBackup(compressed);
-  } catch (error) {
-    console.warn('压缩备份失败：', error?.message || error);
+  const mirror = shouldMirrorToLocalStorage(state) || !idbSaved;
+  if (!mirror) {
+    // 大存档成功写入 IndexedDB 后移除旧的小存档镜像，避免回退到过期备份。
+    removeLocalBackup();
+  } else {
+    try {
+      const json = JSON.stringify(snapshot);
+      const compressed = await compressSnapshot(json);
+      // 避免极端情况下写爆 LocalStorage；超过约 4.2MB 时跳过。
+      if (compressed.length < 4.2 * 1024 * 1024) writeLocalBackup(compressed);
+      else removeLocalBackup();
+    } catch (error) {
+      console.warn('压缩备份失败：', error?.message || error);
+    }
   }
 
   if (!idbSaved) {

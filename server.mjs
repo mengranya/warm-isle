@@ -91,6 +91,9 @@ const PROVIDERS = Object.freeze({
 
 const PORT = Number(process.env.PORT || 4173);
 const HOST = process.env.HOST || '127.0.0.1';
+const CONTROL_ORIGIN = String(process.env.CONTROL_ORIGIN || 'http://127.0.0.1:4180')
+  .trim()
+  .replace(/\/+$/, '');
 const REQUEST_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS || 120_000);
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_MESSAGE_CHARS = 20_000;
@@ -971,6 +974,41 @@ function hasPageAccess(req, pathname) {
   }
 }
 
+async function handleControlProxy(req, res, requestUrl) {
+  const bodyChunks = [];
+  let bodySize = 0;
+  for await (const chunk of req) {
+    bodySize += chunk.length;
+    if (bodySize > 64_000) throw new HttpError(413, 'BODY_TOO_LARGE', '控制台心跳请求过大。');
+    bodyChunks.push(chunk);
+  }
+  const body = bodyChunks.length ? Buffer.concat(bodyChunks) : undefined;
+  const target = `${CONTROL_ORIGIN}${requestUrl.pathname}${requestUrl.search}`;
+  try {
+    const upstream = await fetch(target, {
+      method: req.method,
+      headers: {
+        'Content-Type': req.headers['content-type'] || 'application/json',
+        Accept: 'application/json',
+      },
+      body: ['GET', 'HEAD'].includes(req.method) ? undefined : body,
+    });
+    const payload = Buffer.from(await upstream.arrayBuffer());
+    res.writeHead(upstream.status, {
+      'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    res.end(payload);
+  } catch {
+    // 控制台未启动时不影响暖屿正常使用。
+    res.writeHead(200, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+    });
+    res.end(JSON.stringify({ ok: true, announcements: [] }));
+  }
+}
+
 export function createAppServer() {
   return http.createServer(async (req, res) => {
     const startedAt = Date.now();
@@ -993,6 +1031,9 @@ export function createAppServer() {
     });
 
     try {
+      if (pathname.startsWith('/api/control/')) {
+        return await handleControlProxy(req, res, requestUrl);
+      }
       if (pathname === '/api/health') {
         if (req.method !== 'GET') throw new HttpError(405, 'METHOD_NOT_ALLOWED', '只支持 GET。');
         return await handleHealth(req, res);

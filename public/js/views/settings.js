@@ -200,7 +200,6 @@ export async function render(root, app) {
     class: 'range-value',
     text: `${settings.contextChars} 字符`,
   });
-
   const streamToggle = checkbox({
     id: 'set-stream',
     label: '流式显示回复',

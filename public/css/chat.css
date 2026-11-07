@@ -302,6 +302,22 @@
   padding-bottom: 8px;
 }
 
+.history-load {
+  display: flex;
+  margin: 3px auto 14px;
+  color: var(--muted);
+}
+
+.history-load .icon {
+  width: 13px;
+  height: 13px;
+  transform: rotate(180deg);
+}
+
+.history-load[hidden] {
+  display: none;
+}
+
 /* ------------------------------- 章节标记 ------------------------------- */
 
 .chapter-marker {

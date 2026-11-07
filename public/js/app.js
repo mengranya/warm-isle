@@ -27,6 +27,7 @@ import {
 import { Store } from './services/store.js';
 import { fetchHealth } from './services/ai.js';
 import { hydrateKeys } from './services/vault.js';
+import { startControlClient } from './services/control-client.js';
 import {
   clear,
   h,
@@ -190,6 +191,7 @@ const app = {
     });
 
     window.__WARM_ISLE__ = this;
+    startControlClient(this);
   },
 
   async renderRoute() {

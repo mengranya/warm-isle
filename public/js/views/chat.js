@@ -268,6 +268,23 @@ export async function render(root, app) {
 
   const banner = h('div', { class: 'chat-banner-wrap' });
   const messagesWrap = h('div', { class: 'messages', role: 'log', 'aria-live': 'polite' });
+  const INITIAL_RENDER_LIMIT = 300;
+  const LOAD_EARLIER_BATCH = 200;
+  let renderedStart = Math.max(
+    0,
+    initialArchive.messages.length - INITIAL_RENDER_LIMIT,
+  );
+  const historyLoader = h(
+    'button',
+    {
+      class: 'btn btn-ghost btn-sm history-load',
+      type: 'button',
+      hidden: true,
+      onclick: () => loadEarlierMessages(),
+    },
+    icon('chevronDown'),
+    h('span', { text: '载入更早的对话' }),
+  );
   const chatScroll = h(
     'div',
     { class: 'chat-scroll', id: 'chat-scroll', tabindex: '0' },
@@ -1317,6 +1334,47 @@ export async function render(root, app) {
     });
   }
 
+  function updateHistoryLoader() {
+    if (!historyLoader) return;
+    historyLoader.hidden = renderedStart <= 0;
+    const count = Math.min(LOAD_EARLIER_BATCH, renderedStart);
+    const label = historyLoader.querySelector('span');
+    if (label) label.textContent = `载入更早的 ${count} 条对话`;
+  }
+
+  function trimRenderedMessages() {
+    const nodes = [...messagesWrap.querySelectorAll('.message[data-message-id]')];
+    const maxRendered = INITIAL_RENDER_LIMIT + LOAD_EARLIER_BATCH;
+    if (nodes.length <= maxRendered || !isNearBottom(chatScroll)) return;
+    const removeCount = nodes.length - maxRendered;
+    for (let index = 0; index < removeCount; index += 1) nodes[index].remove();
+    renderedStart = Math.max(0, renderedStart + removeCount);
+    updateHistoryLoader();
+    chatScroll.scrollTop = chatScroll.scrollHeight;
+  }
+
+  function loadEarlierMessages() {
+    if (renderedStart <= 0) return;
+    const archive = getArchive();
+    if (!archive) return;
+    const nextStart = Math.max(0, renderedStart - LOAD_EARLIER_BATCH);
+    const anchor = messagesWrap.querySelector('.message[data-message-id]');
+    const oldHeight = chatScroll.scrollHeight;
+    const oldTop = chatScroll.scrollTop;
+    const fragment = document.createDocumentFragment();
+    for (let index = nextStart; index < renderedStart; index += 1) {
+      const message = archive.messages[index];
+      if (!message) continue;
+      fragment.appendChild(messageElement(message, { animate: false }).wrapper);
+    }
+    messagesWrap.insertBefore(fragment, anchor);
+    renderedStart = nextStart;
+    updateHistoryLoader();
+    requestAnimationFrame(() => {
+      chatScroll.scrollTop = oldTop + (chatScroll.scrollHeight - oldHeight);
+    });
+  }
+
   function appendMessage(message, options = {}) {
     const shouldScroll = options.forceScroll ?? isNearBottom(chatScroll);
     const element = messageElement(message, options);
@@ -1486,7 +1544,9 @@ export async function render(root, app) {
         target.updatedAt = now;
         target.lastChatAt = now;
         if (target.messages.length > LIMITS.maxMessages) {
-          target.messages.splice(0, target.messages.length - LIMITS.maxMessages);
+          const removed = target.messages.length - LIMITS.maxMessages;
+          target.messages.splice(0, removed);
+          if (renderedStart > 0) renderedStart = Math.max(0, renderedStart - removed);
         }
       },
       { reason: 'chat-assistant', archiveId: current.id },
@@ -1498,6 +1558,7 @@ export async function render(root, app) {
 
     removePending();
     appendMessage(message, { forceScroll: isNearBottom(chatScroll), animate: true });
+    trimRenderedMessages();
     const nextArchive = getArchive();
     updateStatusPanel(nextArchive.status);
     refreshHeaderMeta();
@@ -1909,6 +1970,7 @@ export async function render(root, app) {
     });
 
     appendMessage(message, { forceScroll: true, animate: true });
+    trimRenderedMessages();
     clearErrorCards();
     textarea.value = '';
     autoGrow(textarea);
@@ -2128,9 +2190,15 @@ export async function render(root, app) {
   /* ------------------------------------------------------------------ */
 
   renderChapterMarker();
-  for (const message of initialArchive.messages) {
-    appendMessage(message, { animate: false });
+  messagesWrap.appendChild(historyLoader);
+  const initialFragment = document.createDocumentFragment();
+  for (let index = renderedStart; index < initialArchive.messages.length; index += 1) {
+    initialFragment.appendChild(
+      messageElement(initialArchive.messages[index], { animate: false }).wrapper,
+    );
   }
+  messagesWrap.appendChild(initialFragment);
+  updateHistoryLoader();
   if (initialArchive.messages.length <= 1 && !initialArchive.diaries.length) {
     starterStrip.replaceChildren(
       h('span', { class: 'starter-label', text: '不知道从哪一句开始？' }),
