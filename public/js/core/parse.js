@@ -13,10 +13,12 @@ import {
   truncateText,
 } from './utils.js';
 
-const STATUS_START = /<\s*status\b[^>]*>/i;
-const STATUS_START_LOOSE = /<\s*status\b/i;
-const STATUS_END = /<\/\s*status\s*>/i;
-const CHINESE_STATUS_START = /(?:^|\n)\s*(?:【\s*状态\s*】|状态\s*[:：])/;
+const STATUS_START = /[<＜]\s*(?:status\b|状态(?=\s|[>＞]))[^>＞]*[>＞]/i;
+const STATUS_START_LOOSE = /[<＜]\s*(?:status\b|状态(?=\s|[>＞]))/i;
+const STATUS_END = /[<＜]\s*[\/／]\s*(?:status|状态)\s*[>＞]/i;
+const CHINESE_STATUS_START =
+  /(?:^|\n)\s*(?:\*{0,2}\s*(?:【\s*(?:角色)?状态\s*】|(?:角色)?状态\s*[:：])\s*\*{0,2})/;
+const CHINESE_STATUS_JSON = /(?:【\s*(?:角色)?状态\s*】|(?:角色)?状态\s*[:：])\s*\{/;
 
 function cleanStatusValue(value, max = 400) {
   if (value === null || value === undefined) return '';
@@ -30,43 +32,48 @@ function cleanStatusValue(value, max = 400) {
 
 function pickStatusValue(source, keys) {
   for (const key of keys) {
-    if (source && typeof source[key] === 'string' && source[key].trim()) {
-      return source[key];
-    }
+    const value = source?.[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   }
   return '';
 }
 
 export function normalizeStatusPatch(input) {
   if (!input || typeof input !== 'object') return null;
-  const nested =
-    input.status && typeof input.status === 'object'
-      ? input.status
-      : input.state && typeof input.state === 'object'
-        ? input.state
-        : input['角色状态'] && typeof input['角色状态'] === 'object'
-          ? input['角色状态']
-          : null;
+  if (Array.isArray(input)) input = input.find((item) => item && typeof item === 'object');
+  if (!input || typeof input !== 'object') return null;
+  const nestedKeys = [
+    'status',
+    'state',
+    'currentStatus',
+    '角色状态',
+    '当前状态',
+    '状态',
+  ];
+  const nested = nestedKeys
+    .map((key) => input[key])
+    .find((value) => value && typeof value === 'object');
   if (nested) input = nested;
   const patch = {
     health: cleanStatusValue(
-      pickStatusValue(input, ['health', '身体状况', '身体', '健康']),
+      pickStatusValue(input, ['health', '身体状况', '身体状态', '健康状态', '身体', '健康']),
       160,
     ),
     outfit: cleanStatusValue(
-      pickStatusValue(input, ['outfit', 'clothing', '当前衣着', '衣着', '服装']),
+      pickStatusValue(input, ['outfit', 'clothing', '当前衣着', '衣着', '服装', '穿着']),
       180,
     ),
     environment: cleanStatusValue(
-      pickStatusValue(input, ['environment', 'location', '所处环境', '环境', '地点']),
+      pickStatusValue(input, ['environment', 'location', '所处环境', '环境', '地点', '位置']),
       180,
     ),
     action: cleanStatusValue(
-      pickStatusValue(input, ['action', '正在进行的动作', '动作', '行为']),
+      pickStatusValue(input, ['action', '正在进行的动作', '当前动作', '动作', '行为']),
       180,
     ),
     notes: cleanStatusValue(
-      pickStatusValue(input, ['notes', 'detail', '补充描写', '补充', '补述', '细节']),
+      pickStatusValue(input, ['notes', 'detail', '补充描写', '补充', '补述', '细节', '备注']),
       1_000,
     ),
   };
@@ -79,17 +86,17 @@ export function normalizeStatusPatch(input) {
 
 function parseLabeledStatus(raw) {
   const fields = {
-    health: ['身体状况', '身体', '健康', 'health'],
-    outfit: ['当前衣着', '衣着', '服装', 'outfit'],
-    environment: ['所处环境', '环境', '地点', 'environment'],
-    action: ['正在进行的动作', '动作', '行为', 'action'],
-    notes: ['补充描写', '补充', '补述', '细节', 'notes'],
+    health: ['身体状况', '身体状态', '健康状态', '身体', '健康', 'health'],
+    outfit: ['当前衣着', '衣着', '服装', '穿着', 'outfit', 'clothing'],
+    environment: ['所处环境', '环境', '地点', '位置', 'environment', 'location'],
+    action: ['正在进行的动作', '当前动作', '动作', '行为', 'action'],
+    notes: ['补充描写', '补充', '补述', '细节', '备注', 'notes'],
   };
   const result = {};
   for (const [key, labels] of Object.entries(fields)) {
     for (const label of labels) {
       const regex = new RegExp(
-        `(?:^|[\\n,，;；、|])\\s*(?:[-*•]\\s*)?\\*{0,2}["“']?${label}(?:\\s*[（(][^）)]*[）)])?["”']?\\*{0,2}\\s*[:：]\\s*["“']?([^"\\n,，;；}]+)`,
+        `(?:^|[\\n,，;；、|{])\\s*(?:[-*•]\\s*)?\\*{0,2}["“']?${label}(?:\\s*[（(][^）)]*[）)])?["”']?\\*{0,2}\\s*[:：]\\s*["“']?([^"\\n,，;；}]+)`,
         'i',
       );
       const match = raw.match(regex);
@@ -102,18 +109,99 @@ function parseLabeledStatus(raw) {
   return normalizeStatusPatch(result);
 }
 
+function parseStatusTags(raw) {
+  const fields = {
+    health: ['身体状况', '身体状态', '健康状态', '身体', '健康', 'health'],
+    outfit: ['当前衣着', '衣着', '服装', '穿着', 'outfit', 'clothing'],
+    environment: ['所处环境', '环境', '地点', '位置', 'environment', 'location'],
+    action: ['正在进行的动作', '当前动作', '动作', '行为', 'action'],
+    notes: ['补充描写', '补充', '补述', '细节', '备注', 'notes'],
+  };
+  const result = {};
+  for (const [key, labels] of Object.entries(fields)) {
+    for (const label of labels) {
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const match = String(raw).match(
+        new RegExp(`<\\s*${escaped}\\s*>([\\s\\S]*?)<\\s*\\/\\s*${escaped}\\s*>`, 'i'),
+      );
+      if (match?.[1]) {
+        result[key] = match[1];
+        break;
+      }
+    }
+  }
+  return normalizeStatusPatch(result);
+}
+
+function parseStatusBrackets(raw) {
+  const fields = {
+    health: ['身体状况', '身体状态', '健康状态', '身体', '健康', 'health'],
+    outfit: ['当前衣着', '衣着', '服装', '穿着', 'outfit', 'clothing'],
+    environment: ['所处环境', '环境', '地点', '位置', 'environment', 'location'],
+    action: ['正在进行的动作', '当前动作', '动作', '行为', 'action'],
+    notes: ['补充描写', '补充', '补述', '细节', '备注', 'notes'],
+  };
+  const result = {};
+  for (const [key, labels] of Object.entries(fields)) {
+    for (const label of labels) {
+      const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const match = String(raw).match(
+        new RegExp(`(?:【|\\[)\\s*${escaped}\\s*(?:】|\\])\\s*[:：]?\\s*([^\\n|,，;；【\\[]+)`, 'i'),
+      );
+      if (match?.[1]) {
+        result[key] = match[1];
+        break;
+      }
+    }
+  }
+  return normalizeStatusPatch(result);
+}
+
+function parseStatusTable(raw) {
+  const fields = {
+    health: ['身体状况', '身体状态', '健康状态', '身体', '健康', 'health'],
+    outfit: ['当前衣着', '衣着', '服装', '穿着', 'outfit', 'clothing'],
+    environment: ['所处环境', '环境', '地点', '位置', 'environment', 'location'],
+    action: ['正在进行的动作', '当前动作', '动作', '行为', 'action'],
+    notes: ['补充描写', '补充', '补述', '细节', '备注', 'notes'],
+  };
+  const result = {};
+  for (const line of String(raw).split(/\r?\n/)) {
+    if (!line.includes('|')) continue;
+    const cells = line
+      .split('|')
+      .map((cell) => cell.trim())
+      .filter((cell) => cell && !/^:?-{2,}:?$/.test(cell));
+    if (cells.length < 2) continue;
+    const label = cells[0].replace(/[*"“”'‘’]/g, '').trim();
+    const key = Object.entries(fields).find(([, labels]) =>
+      labels.some((item) => item.toLowerCase() === label.toLowerCase()),
+    )?.[0];
+    if (key && cells[1]) result[key] = cells[1];
+  }
+  return normalizeStatusPatch(result);
+}
+
 function parseStatusCandidate(raw) {
   if (!raw) return null;
   const text = String(raw)
+    .replace(/[\u200b-\u200d\u2060\ufeff]/g, '')
     .replace(/^\s*```(?:json)?\s*/i, '')
     .replace(/\s*```\s*$/i, '')
     .trim();
-  const parsed = parseLooseJson(text);
+  let parsed = parseLooseJson(text);
+  if (typeof parsed === 'string') parsed = parseLooseJson(parsed);
   if (parsed && typeof parsed === 'object') {
     const status = normalizeStatusPatch(parsed);
     if (status) return status;
   }
-  return parseLabeledStatus(text.replace(/\*\*/g, ''));
+  // JSON 轻微跑偏或字段名不在标准列表时，继续尝试标签 / 表格 / XML 标签解析。
+  return (
+    parseLabeledStatus(text.replace(/\*\*/g, '')) ||
+    parseStatusTable(text) ||
+    parseStatusTags(text) ||
+    parseStatusBrackets(text)
+  );
 }
 
 function statusFieldCount(status) {
@@ -145,11 +233,42 @@ function extractLooseStatus(content) {
     }
   }
 
+  const keywordStart = content.search(
+    /(?:身体状况|身体状态|健康状态|当前衣着|衣着|服装|所处环境|环境|地点|正在进行的动作|当前动作|动作|health|outfit|environment|action)\s*[:：=]/i,
+  );
+  if (keywordStart >= 0) {
+    const status = parseStatusCandidate(content.slice(keywordStart));
+    if (statusFieldCount(status) >= 2) {
+      return { status, index: keywordStart };
+    }
+  }
+
+  const tableStart = content.search(
+    /(?:^|\n)\s*\|?\s*(?:身体状况|身体状态|当前衣着|衣着|所处环境|环境|正在进行的动作|动作|health|outfit|environment|action)\s*\|/i,
+  );
+  if (tableStart >= 0) {
+    const status = parseStatusCandidate(content.slice(tableStart));
+    if (statusFieldCount(status) >= 2) {
+      return { status, index: tableStart };
+    }
+  }
+
+  // 模型有时会漏掉 <status> 标签，直接在正文末尾输出 JSON；
+  // 从正文末尾附近最早的 { / [ 开始尝试，能连同 state / 角色状态 外壳一起移除。
+  const scanFrom = Math.max(0, content.length - 4_000);
+  for (let index = scanFrom; index < content.length; index += 1) {
+    if (content[index] !== '{' && content[index] !== '[') continue;
+    const status = parseStatusCandidate(content.slice(index));
+    if (statusFieldCount(status) >= 2) {
+      return { status, index };
+    }
+  }
+
   return null;
 }
 
 function extractStatus(raw) {
-  if (!raw) return { content: '', status: null, hadStatusBlock: false };
+  if (!raw) return { content: '', status: null, hadStatusBlock: false, statusPreview: '' };
 
   const original = String(raw);
   let content = original;
@@ -165,15 +284,20 @@ function extractStatus(raw) {
     statusRaw = (endMatch ? after.slice(0, endMatch.index) : after).trim();
     content = before;
   } else {
-    // 兼容模型擅自使用【状态】作为控制块开头的情况。
+    // 兼容模型擅自使用【状态】/【角色状态】作为控制块开头的情况。
     const looseStart = content.search(CHINESE_STATUS_START);
-    if (looseStart >= 0) {
-      const block = content.slice(looseStart);
+    const looseJsonStart = content.search(CHINESE_STATUS_JSON);
+    const labelStart =
+      looseJsonStart >= 0 && (looseStart < 0 || looseJsonStart >= looseStart)
+        ? looseJsonStart
+        : looseStart;
+    if (labelStart >= 0) {
+      const block = content.slice(labelStart);
       const jsonMatch = block.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         hadStatusBlock = true;
         statusRaw = jsonMatch[0];
-        content = content.slice(0, looseStart);
+        content = content.slice(0, labelStart);
       }
     }
   }
@@ -200,7 +324,18 @@ function extractStatus(raw) {
     .replace(/```(?:json)?\s*$/i, '')
     .trim();
 
-  return { content, status, hadStatusBlock };
+  return {
+    content,
+    status,
+    hadStatusBlock,
+    statusPreview: statusRaw
+      ? String(statusRaw).slice(0, 600)
+      : status
+        ? ''
+        : `${String(original).slice(0, 300)}${
+            String(original).length > 900 ? '\n…\n' : ''
+          }${String(original).slice(-600)}`,
+  };
 }
 
 /** 解析完整回复，返回可显示的正文与状态补丁。 */

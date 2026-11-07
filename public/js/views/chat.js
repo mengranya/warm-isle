@@ -106,6 +106,44 @@ function mergeAIStatus(existing, patch) {
   return normalizeStatus(merged, existing);
 }
 
+async function repairStatusFromReply({ settings, content, currentStatus, apiKey, signal }) {
+  const current = currentStatus
+    ? JSON.stringify({
+        health: currentStatus.health,
+        outfit: currentStatus.outfit,
+        environment: currentStatus.environment,
+        action: currentStatus.action,
+        notes: currentStatus.notes,
+      })
+    : '（暂无）';
+  async function ask(system, user) {
+    const result = await completeChat({
+      settings: { ...settings, maxTokens: 700, temperature: 0.2, stream: false },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      apiKey,
+      signal,
+      useCache: false,
+    });
+    return extractAssistantPayload(result.text).status;
+  }
+
+  const reply = `当前状态：${current}\n\n角色本轮回复：\n${String(content || '').slice(-6_000)}`;
+  const first = await ask(
+    '你是角色状态提取器。只输出一个 <status>{"health":"身体状况","outfit":"当前衣着","environment":"所处环境","action":"正在进行的动作","notes":"补充细节"}</status>，不要正文、不要解释。根据角色本轮回复更新状态；回复没有提到的字段沿用当前状态。',
+    `${reply}\n\n只输出状态块。`,
+  );
+  if (first) return first;
+
+  // 某些模型会忽略带标签的格式，第二次要求纯 JSON。
+  return ask(
+    '只输出一个合法 JSON 对象，不要代码围栏、不要解释。字段固定为 health、outfit、environment、action、notes，值必须是中文字符串。',
+    `${reply}\n\n只输出 JSON。`,
+  );
+}
+
 function animationLabel(id) {
   return DIALOGUE_ANIMATIONS.find((animation) => animation.id === id)?.label || '自然';
 }
@@ -1521,6 +1559,7 @@ export async function render(root, app) {
     durationMs,
     demo = false,
     partial = false,
+    statusPreview = '',
   }) {
     const current = getArchive();
     if (!current) return null;
@@ -1569,6 +1608,7 @@ export async function render(root, app) {
     if (!status && !partial) {
       store.warn('ai.status.missing', '模型回复中没有可解析的状态块，已保留上一轮状态。', {
         archiveId: current.id,
+        detail: statusPreview ? { statusPreview } : undefined,
       });
     }
 
@@ -1857,10 +1897,39 @@ export async function render(root, app) {
       if (!content) {
         throw new Error('模型没有返回可显示的正文。');
       }
+      // 模型偶尔会漏掉状态块。单独补一次状态提取，
+      // 只发送本轮回复与当前状态，不重复发送整段对话。
+      if (!parsed.status && !settingsSnapshot.demoMode) {
+        try {
+          const repaired = await repairStatusFromReply({
+            settings: requestSettings,
+            content,
+            currentStatus: current.status,
+            apiKey: app.getEffectiveApiKey(providerId),
+            signal: abortController.signal,
+          });
+          if (repaired) {
+            parsed.status = repaired;
+            store.info('ai.status.repaired', '模型漏掉了状态块，已自动补全本轮状态。', {
+              archiveId: current.id,
+            });
+          } else {
+            store.warn('ai.status.repair.empty', '自动补全没有返回可解析的状态字段。', {
+              archiveId: current.id,
+            });
+          }
+        } catch (error) {
+          store.warn('ai.status.repair.failed', '自动补全状态失败，已保留上一轮状态。', {
+            archiveId: current.id,
+            detail: { message: error?.message || '', code: error?.code || '' },
+          });
+        }
+      }
       const durationMs = Math.round(performance.now() - startedAt);
       commitAssistant({
         content,
         status: parsed.status || demoStatus,
+        statusPreview: parsed.statusPreview,
         usage,
         provider: resultProvider,
         model: resultModel,

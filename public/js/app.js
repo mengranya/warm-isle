@@ -162,6 +162,7 @@ const app = {
         version: APP_VERSION,
         storage: this.store.loadInfo.source,
         archives: this.store.state.archives.length,
+        statusRepair: 2,
       },
     });
 
