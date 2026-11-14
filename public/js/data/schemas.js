@@ -176,7 +176,7 @@ export function normalizePlugin(input, { id = null, builtin = false } = {}) {
     throw new SchemaError('插件数据必须是一个 JSON 对象。');
   }
   const name = asString(input.name, '', 80);
-  const prompt = asString(input.prompt, '', 6_000);
+  const prompt = asString(input.prompt, '', 20_000);
   if (!name) throw new SchemaError('插件缺少「name」字段。');
   if (!prompt) throw new SchemaError(`插件「${name}」缺少 prompt 指令。`);
 
@@ -507,7 +507,7 @@ export function normalizeSettings(input) {
     model,
     baseUrl: asString(source.baseUrl, '', 500),
     temperature: clamp(safeNumber(source.temperature, DEFAULT_SETTINGS.temperature), 0, 2),
-    maxTokens: Math.round(clamp(safeNumber(source.maxTokens, DEFAULT_SETTINGS.maxTokens), 64, 4_096)),
+    maxTokens: Math.round(clamp(safeNumber(source.maxTokens, DEFAULT_SETTINGS.maxTokens), 64, 8_192)),
     stream: source.stream !== false,
     useServerKey: source.useServerKey !== false,
     rememberKeys: source.rememberKeys !== false,

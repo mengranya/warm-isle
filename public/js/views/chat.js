@@ -1671,7 +1671,7 @@ export async function render(root, app) {
     const configuredMaxTokens = Number(settingsSnapshot.maxTokens) || 800;
     const suggestedMaxTokens = Number(prompt.meta.suggestedMaxTokens) || configuredMaxTokens;
     const effectiveMaxTokens = Math.min(
-      4_096,
+      8_192,
       Math.max(configuredMaxTokens, suggestedMaxTokens),
     );
     const maxTokensRaised = effectiveMaxTokens > configuredMaxTokens;
@@ -1725,6 +1725,8 @@ export async function render(root, app) {
       pluginCount: prompt.meta.pluginIds.length,
       pluginNames: prompt.meta.pluginNames || [],
       pluginChars: prompt.meta.pluginChars || 0,
+      pluginExcluded: prompt.meta.pluginExcluded || [],
+      pluginWarnings: prompt.meta.pluginWarnings || [],
       pluginLength: prompt.meta.pluginLength || null,
       maxTokensConfigured: configuredMaxTokens,
       maxTokensEffective: effectiveMaxTokens,

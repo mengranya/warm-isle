@@ -172,7 +172,7 @@ export async function render(root, app) {
     type: 'range',
     id: 'set-max-tokens',
     min: '128',
-    max: '4096',
+    max: '8192',
     step: '64',
     value: String(settings.maxTokens),
     class: 'range-input',

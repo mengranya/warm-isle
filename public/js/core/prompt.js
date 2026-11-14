@@ -14,9 +14,11 @@ import {
   normalizeMemoryStrength,
 } from './memory-strength.js';
 import {
+  PLUGIN_RUNTIME_LIMITS,
   compilePluginRuntime,
   formatPluginEnforcement,
   formatPluginInstructionBlock,
+  formatPluginTurnReminder,
   getPluginHistoryBudget,
   summarizePluginRuntime,
 } from './plugins.js';
@@ -139,16 +141,17 @@ export function buildChatPrompt({
 }) {
   if (!archive || !persona) throw new Error('构建提示词缺少存档或人格。');
 
-  const totalBudget = Math.max(1_800, Number(settings.contextChars) || 4_600);
+  const configuredBudget = Math.max(1_800, Number(settings.contextChars) || 4_600);
   const pluginRuntime = compilePluginRuntime(plugins, {
     configuredMaxTokens: Number(settings.maxTokens) || 800,
-    maxPromptChars: Math.min(
-      7_000,
-      Math.max(2_600, Math.round(totalBudget * 1.35)),
-    ),
+    maxPromptChars: PLUGIN_RUNTIME_LIMITS.maxPromptChars,
   });
 
-  // 插件完整载入后再分配剩余预算，避免插件挤占关键上下文时被静默截断。
+  // 插件是硬约束：先保证插件全文，再额外保留至少 2600 字给世界、记忆与最近对话。
+  const totalBudget = Math.max(
+    configuredBudget,
+    pluginRuntime.totalChars + 2_600,
+  );
   const remainingBudget = Math.max(1_800, totalBudget - pluginRuntime.totalChars);
   const worldBudget = Math.max(500, Math.round(remainingBudget * 0.26));
   const diaryBudget = Math.max(340, Math.round(remainingBudget * 0.19));
@@ -282,15 +285,23 @@ export function buildChatPrompt({
     section('当前场景状态', statusBody),
     section('本轮演绎要求', turnRules),
     `\n注意：你是「${APP_NAME}」中的角色。输出应像小说中的实时场景，而不是问答。`,
-    enforcement,
-    '',
     statusContract,
+    enforcement,
   ]
     .filter(Boolean)
     .join('\n');
 
   const messages = [{ role: 'system', content: system }, ...historySelection.messages];
-  const charCount = system.length + historySelection.chars;
+  const pluginReminder = formatPluginTurnReminder(pluginRuntime);
+  const lastMessage = messages.at(-1);
+  if (pluginReminder && lastMessage?.role === 'user') {
+    // 只影响本次请求，不写回存档；利用末尾注意力强化插件执行。
+    messages[messages.length - 1] = {
+      ...lastMessage,
+      content: `${lastMessage.content}${pluginReminder}`,
+    };
+  }
+  const charCount = system.length + historySelection.chars + pluginReminder.length;
   const pluginSummary = summarizePluginRuntime(pluginRuntime);
 
   return {
@@ -298,6 +309,7 @@ export function buildChatPrompt({
     messages,
     meta: {
       charCount,
+      contextChars: totalBudget,
       estimatedTokens: estimateTokens(messages.map((message) => message.content).join('\n')),
       historyMessages: historySelection.messages.length,
       historyChars: historySelection.chars,

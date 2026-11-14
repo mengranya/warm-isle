@@ -10,21 +10,28 @@
  * 该模块不访问 DOM，也不修改任何存档数据。
  */
 
-import {
-  clamp,
-  countChars,
-  estimateTokens,
-  normalizeWhitespace,
-  truncateText,
-} from './utils.js';
+import { clamp, countChars, estimateTokens } from './utils.js';
 
 export const PLUGIN_RUNTIME_LIMITS = Object.freeze({
-  maxPlugins: 16,
-  maxPromptChars: 7_000,
-  maxPerPluginChars: 4_500,
-  hardMaxTokens: 4_096,
+  maxPlugins: 32,
+  maxPromptChars: 24_000,
+  maxPerPluginChars: 20_000,
+  hardMaxTokens: 8_192,
   minSuggestedTokens: 512,
 });
+
+/**
+ * 插件原文必须保留换行、列表、JSON 示例与代码块。
+ * 通用 normalizeWhitespace 会把它们压成一行，模型会明显降低执行率。
+ */
+function normalizePluginPrompt(value) {
+  return String(value ?? '')
+    .replace(/^\uFEFF/, '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 const CN_DIGITS = {
   零: 0,
@@ -209,7 +216,7 @@ export function compilePluginRuntime(
   let usedChars = 0;
 
   for (const plugin of enabled.slice(0, maxPlugins)) {
-    const fullPrompt = normalizeWhitespace(plugin.prompt).slice(
+    const fullPrompt = normalizePluginPrompt(plugin.prompt).slice(
       0,
       PLUGIN_RUNTIME_LIMITS.maxPerPluginChars,
     );
@@ -314,6 +321,37 @@ export function computeSuggestedMaxTokens({
   );
 }
 
+/** 放在最后一轮用户消息后的短提醒，利用模型对末尾内容的注意力。 */
+export function formatPluginTurnReminder(runtime) {
+  if (!runtime?.selected?.length) return '';
+  const names = runtime.selected.map((plugin) => `「${plugin.name}」`).join('、');
+  const constraints = [];
+  if (runtime.length.hasConstraint) {
+    const { min, max } = runtime.length;
+    constraints.push(
+      min !== null && max !== null
+        ? `正文 ${min}–${max} 字`
+        : min !== null
+          ? `正文不少于 ${min} 字`
+          : `正文不超过 ${max} 字`,
+    );
+  }
+  if (runtime.flags.noQuestions) constraints.push('不得向玩家提问');
+  if (runtime.flags.allowPlayerAgency) constraints.push('可按插件代行玩家必要行动');
+  if (runtime.flags.integrityFirst) constraints.push('不得截断');
+  if (runtime.flags.forceStatus) constraints.push('必须刷新状态块');
+  return [
+    '',
+    '',
+    '【插件本轮执行提醒｜硬约束】',
+    `必须完整执行：${names}。`,
+    constraints.length ? `关键复核：${constraints.join('；')}。` : '',
+    '冲突时高优先级插件优先；正文结束后必须保留状态块。',
+  ]
+    .filter(Boolean)
+    .join('\n');
+}
+
 /** 顶部最高优先级插件块。 */
 export function formatPluginInstructionBlock(runtime) {
   if (!runtime?.selected?.length) return '';
@@ -372,11 +410,20 @@ export function formatPluginEnforcement(runtime) {
     '输出格式：先写完整正文，再另起一行输出状态块。状态块不计入正文字数，必须使用框架规定的 <status> 标签；即使插件只描述了字段名，也要按下方标签格式输出，禁止省略标签。',
   );
   lines.push(
+    '插件冲突：优先级数字更大的插件优先；同级时按上方顺序。低优先级条款不得覆盖高优先级插件，但不得借此忽略任何可同时满足的要求。',
+  );
+  lines.push(
     '冲突顺序：用户本轮明确指令 > 已启用插件 > 人格与世界书 > 通用规则。执行前逐条对照以上插件要求，完成后再收尾。',
   );
-  return ['【插件执行复核｜最后检查，必须全部满足】', ...lines.map((line) => `- ${line}`)].join(
-    '\n',
+  const checklist = runtime.selected.map(
+    (plugin, index) =>
+      `插件 ${index + 1}「${plugin.name}」，优先级 ${plugin.priority}：必须逐条满足其原文要求，不得只执行其中一部分。`,
   );
+  return [
+    '【插件执行复核｜最后检查，必须全部满足】',
+    ...checklist.map((line) => `- ${line}`),
+    ...lines.map((line) => `- ${line}`),
+  ].join('\n');
 }
 
 /** 计算动态历史预算：长篇插件需要保留上一轮完整叙事，否则续写会失真。 */

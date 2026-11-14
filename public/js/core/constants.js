@@ -402,7 +402,7 @@ export const SANDBOX_LIMITS = Object.freeze({
   maxChronicles: 200,
   maxActionChars: 2000,
   defaultMaxTokens: 1_600,
-  hardMaxTokens: 4_096,
+  hardMaxTokens: 8_192,
   maxAttributes: 18,
   minAttributes: 3,
 });
